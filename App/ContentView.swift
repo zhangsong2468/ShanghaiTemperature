@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import AppKit
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -10,9 +11,10 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                Image(systemName: "chart.xyaxis.line")
-                    .font(.system(size: 24, weight: .light))
-                    .foregroundStyle(TemperaturePalette.minimum)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("上海温度").font(.title3).fontWeight(.medium)
                     Text("上海 · 摄氏度 · 7 / 15 / 30 天")

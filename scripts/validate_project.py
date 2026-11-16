@@ -15,7 +15,7 @@ targets={o['name']:o for o in objects.values() if o['isa']=='PBXNativeTarget'}
 assert set(targets)=={'ShanghaiTemperature','ShanghaiTemperatureWidgets'}
 for o in objects.values():
     if o['isa']=='PBXFileReference' and o.get('sourceTree')=='<group>':
-        assert (root/o['path']).is_file(), o['path']
+        assert (root/o['path']).exists(), o['path']
 
 def source_paths(target):
     phase=next(objects[i] for i in target['buildPhases'] if objects[i]['isa']=='PBXSourcesBuildPhase')

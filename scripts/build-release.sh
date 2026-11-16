@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.2.2}"
 BUILD_NUMBER="${BUILD_NUMBER:-2}"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   echo 'Invalid version or build number.' >&2; exit 2
@@ -19,6 +19,7 @@ xcodebuild -project ShanghaiTemperature.xcodeproj -scheme ShanghaiTemperature \
 APP="$PWD/build/App/Build/Products/Release/ShanghaiTemperature.app"
 EXT="$APP/Contents/PlugIns/ShanghaiTemperatureWidgets.appex"
 test -d "$EXT"
+test -f "$APP/Contents/Resources/AppIcon.icns"
 # Sign nested code first, then its host. Never use --deep to sign nested code.
 codesign --force --sign - --timestamp=none --generate-entitlement-der \
   --entitlements Widgets/Widgets.entitlements "$EXT"

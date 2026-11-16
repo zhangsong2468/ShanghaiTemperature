@@ -91,6 +91,18 @@
 			"path" = "Widgets/Widgets.entitlements";
 			"sourceTree" = "<group>";
 		};
+		"87C56CF165B4DAF887A57513" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "folder.assetcatalog";
+			"path" = "App/Assets.xcassets";
+			"sourceTree" = "<group>";
+		};
+		"8B972F83B83354AE1241E2F6" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text";
+			"path" = "App/Resources/Meteocons-LICENSE.txt";
+			"sourceTree" = "<group>";
+		};
 		"885C90F66F9A72E63491669F" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "wrapper.framework";
@@ -120,7 +132,7 @@
 		};
 		"19F479106CE8C3BA8C106518" = {
 			"isa" = "PBXGroup";
-			"children" = ("2CC0AC3580CD2889ACEADAB9", "CA7C55708D5974AE116887EC", "3F7811863981B6B2701AC7F3", "E9539FD75E822C27C62AD6D8", "08712BB81E2AAA444C553211", "01CE24A8B378AECB735A7AA1", "42C59AF8A4BAE559BC5A5D5D", "E72685212AF966A85FF3F9E9", "96420B1F91BD6CB2374D9CB0", "F73AD719F865151D5B19EACD", "4C46736F696F71DC1154E264", "06FA2F57AF41234CE10EAC65", "0A3E27B8CA818264D75C8D81");
+			"children" = ("2CC0AC3580CD2889ACEADAB9", "CA7C55708D5974AE116887EC", "3F7811863981B6B2701AC7F3", "E9539FD75E822C27C62AD6D8", "08712BB81E2AAA444C553211", "01CE24A8B378AECB735A7AA1", "42C59AF8A4BAE559BC5A5D5D", "E72685212AF966A85FF3F9E9", "96420B1F91BD6CB2374D9CB0", "F73AD719F865151D5B19EACD", "4C46736F696F71DC1154E264", "87C56CF165B4DAF887A57513", "8B972F83B83354AE1241E2F6", "06FA2F57AF41234CE10EAC65", "0A3E27B8CA818264D75C8D81");
 			"sourceTree" = "<group>";
 		};
 		"4717EADADFB85193942E8E9C" = {
@@ -167,10 +179,18 @@
 			"files" = ("CCA64CE97280765648C8F9FC", "5E751A6728E0A827E7D90A25", "C5A18757CF6D573DF6746EB5");
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
+		"455BD51EF14F38ED93045375" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "87C56CF165B4DAF887A57513";
+		};
+		"52983539471608461560EBE5" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8B972F83B83354AE1241E2F6";
+		};
 		"88EAC1297EFC578EA1E87A58" = {
 			"isa" = "PBXResourcesBuildPhase";
 			"buildActionMask" = "2147483647";
-			"files" = ();
+			"files" = ("455BD51EF14F38ED93045375", "52983539471608461560EBE5");
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
 		"5AF0776BB07B1367A99FE456" = {
@@ -189,10 +209,11 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.0";
+				"MARKETING_VERSION" = "0.2.2";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"SWIFT_COMPILATION_MODE" = "singlefile";
+				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
 			};
 		};
 		"92CF243770F70A083086E5FC" = {
@@ -211,10 +232,11 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.0";
+				"MARKETING_VERSION" = "0.2.2";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"SWIFT_COMPILATION_MODE" = "wholemodule";
+				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
 			};
 		};
 		"184EDA24B5BED44E4662F462" = {
@@ -285,7 +307,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.0";
+				"MARKETING_VERSION" = "0.2.2";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"SWIFT_COMPILATION_MODE" = "singlefile";
@@ -309,7 +331,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.0";
+				"MARKETING_VERSION" = "0.2.2";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"SWIFT_COMPILATION_MODE" = "wholemodule";

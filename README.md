@@ -2,6 +2,8 @@
 
 原生 macOS 应用，固定上海市、摄氏度、Asia/Shanghai 时区。包含 7 天、15 天、30 天三个标准中号桌面小组件；高温为珊瑚橙线，低温为冰蓝线，透明背景，无地区、单位或样式配置。
 
+v0.2.2 新增浅灰透明玻璃应用图标，保留暖金色太阳、珍珠白云和淡色温度曲线。设计参考 Bas Milius 的 Meteocons（MIT），版权说明随应用一起打包。图标已提供全部 macOS 标准尺寸，构建时检查 AppIcon.icns 是否实际生成。
+
 ## GitHub 在线构建
 
 本工程不要求使用者本机安装 Xcode。GitHub Actions 的 `macos-26` 运行器负责：
@@ -11,7 +13,7 @@
 3. 用完整 Xcode 编译 arm64 + x86_64 应用及 WidgetKit 扩展。
 4. 先对扩展、再对应用进行 ad-hoc 签名，并检查签名、双架构与扩展信息。
 5. 生成 ZIP、DMG、SHA256 校验文件，作为 Actions 构建产物保存。
-6. 版本标签（例如 `v0.2.0`）构建成功后发布预览版 GitHub Release。
+6. 版本标签（例如 `v0.2.2`）构建成功后发布预览版 GitHub Release。
 
 初次上传运行：
 
@@ -19,7 +21,7 @@
 bash scripts/publish-github.sh --public --release
 ```
 
-这个命令会在当前登录的 GitHub 账户下创建 **公开仓库 `ShanghaiTemperature`**，上传此目录的源码，并推送 `v0.2.0` 标签。若未登录，会进入 GitHub 官方登录流程。脚本会使用 GitHub noreply 邮箱提交；不包含私人证书、API Key、个人文件或其他项目源码。已存在的同名仓库不会被覆盖。GitHub CLI 需提前安装（本机已检测到 `gh`）。
+这个命令会在当前登录的 GitHub 账户下创建 **公开仓库 `ShanghaiTemperature`**，上传此目录的源码，并推送 `v0.2.2` 标签。若未登录，会进入 GitHub 官方登录流程。脚本会使用 GitHub noreply 邮箱提交；不包含私人证书、API Key、个人文件或其他项目源码。已存在的同名仓库不会被覆盖。GitHub CLI 需提前安装（本机已检测到 `gh`）。
 
 日常推送 main 运行构建并保留产物；发布新版本则推送新的 `vX.Y.Z` 标签。Release 默认为预览版，不宣称完成了实机验收。不要重复覆盖旧标签。
 

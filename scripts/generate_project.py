@@ -34,6 +34,9 @@ products = obj('products', 'PBXGroup', children=[app_product, widget_product], n
 extra = []
 for path in ['README.md','App/Info.plist','App/App.entitlements','Widgets/Info.plist','Widgets/Widgets.entitlements']:
     extra.append(obj('file:'+path, 'PBXFileReference', lastKnownFileType='text.plist.xml' if path.endswith(('.plist','.entitlements')) else 'text', path=path, sourceTree='<group>'))
+asset_ref = obj('app-assets', 'PBXFileReference', lastKnownFileType='folder.assetcatalog', path='App/Assets.xcassets', sourceTree='<group>')
+notice_ref = obj('icon-notice', 'PBXFileReference', lastKnownFileType='text', path='App/Resources/Meteocons-LICENSE.txt', sourceTree='<group>')
+extra += [asset_ref, notice_ref]
 framework_refs = []
 for fw in ['SwiftUI', 'Charts', 'WidgetKit']:
     framework_refs.append(obj('framework:'+fw, 'PBXFileReference', lastKnownFileType='wrapper.framework',
@@ -48,7 +51,8 @@ for extension in [False, True]:
     obj(prefix+':sources', 'PBXSourcesBuildPhase', buildActionMask='2147483647', files=builds, runOnlyForDeploymentPostprocessing='0')
     frameworks = [obj(prefix+':framework:'+str(i),'PBXBuildFile',fileRef=ref) for i,ref in enumerate(framework_refs)]
     obj(prefix+':frameworks','PBXFrameworksBuildPhase',buildActionMask='2147483647',files=frameworks,runOnlyForDeploymentPostprocessing='0')
-    obj(prefix+':resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=[],runOnlyForDeploymentPostprocessing='0')
+    resources = [] if extension else [obj('app-assets-build','PBXBuildFile',fileRef=asset_ref), obj('icon-notice-build','PBXBuildFile',fileRef=notice_ref)]
+    obj(prefix+':resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=resources,runOnlyForDeploymentPostprocessing='0')
     config_ids = []
     for config in ['Debug','Release']:
         settings = {
@@ -59,13 +63,15 @@ for extension in [False, True]:
             'GENERATE_INFOPLIST_FILE':'NO','CODE_SIGN_STYLE':'Automatic',
             'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','SDKROOT':'macosx',
             'SUPPORTED_PLATFORMS':'macosx', 'ENABLE_HARDENED_RUNTIME':'YES',
-            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.2.0',
+            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.2.2',
             'LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks']+(['@executable_path/../../../../Frameworks'] if extension else []),
             'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O',
             'SWIFT_COMPILATION_MODE':'singlefile' if config=='Debug' else 'wholemodule',
         }
         if extension:
             settings.update({'APPLICATION_EXTENSION_API_ONLY':'YES','SKIP_INSTALL':'YES'})
+        else:
+            settings['ASSETCATALOG_COMPILER_APPICON_NAME'] = 'AppIcon'
         config_ids.append(obj(prefix+':config:'+config,'XCBuildConfiguration',name=config,buildSettings=settings))
     obj(prefix+':config-list','XCConfigurationList',buildConfigurations=config_ids,defaultConfigurationIsVisible='0',defaultConfigurationName='Release')
 
