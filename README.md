@@ -13,7 +13,7 @@ v0.2.2 新增浅灰透明玻璃应用图标，保留暖金色太阳、珍珠白�
 3. 用完整 Xcode 编译 arm64 + x86_64 应用及 WidgetKit 扩展。
 4. 先对扩展、再对应用进行 ad-hoc 签名，并检查签名、双架构与扩展信息。
 5. 生成 ZIP、DMG、SHA256 校验文件，作为 Actions 构建产物保存。
-6. 版本标签（例如 `v0.2.2`）构建成功后发布预览版 GitHub Release。
+6. 版本标签（例如 `v0.2.3`）构建成功后发布预览版 GitHub Release。
 
 初次上传运行：
 
@@ -21,7 +21,7 @@ v0.2.2 新增浅灰透明玻璃应用图标，保留暖金色太阳、珍珠白�
 bash scripts/publish-github.sh --public --release
 ```
 
-这个命令会在当前登录的 GitHub 账户下创建 **公开仓库 `ShanghaiTemperature`**，上传此目录的源码，并推送 `v0.2.2` 标签。若未登录，会进入 GitHub 官方登录流程。脚本会使用 GitHub noreply 邮箱提交；不包含私人证书、API Key、个人文件或其他项目源码。已存在的同名仓库不会被覆盖。GitHub CLI 需提前安装（本机已检测到 `gh`）。
+这个命令会在当前登录的 GitHub 账户下创建 **公开仓库 `ShanghaiTemperature`**，上传此目录的源码，并推送 `v0.2.3` 标签。若未登录，会进入 GitHub 官方登录流程。脚本会使用 GitHub noreply 邮箱提交；不包含私人证书、API Key、个人文件或其他项目源码。已存在的同名仓库不会被覆盖。GitHub CLI 需提前安装（本机已检测到 `gh`）。
 
 日常推送 main 运行构建并保留产物；发布新版本则推送新的 `vX.Y.Z` 标签。Release 默认为预览版，不宣称完成了实机验收。不要重复覆盖旧标签。
 
@@ -84,3 +84,7 @@ bash scripts/build-release.sh
 - `Tests/`：由 Swift Package 驱动的真实 Swift 测试。
 - `.github/workflows/build.yml`：在线测试、构建、产物保存与预览发布。
 - `scripts/`：工程生成、结构检查、构建打包、公开仓库上传脚本。
+
+## v0.2.3 组件启动修复
+
+本机日志确认扩展已注册、已被 chronod 启动，但在读取组件描述时发生 WidgetKit 断言崩溃。改为三个独立的无状态 Widget 类型，使系统通过 init() 重建时每个类型始终对应同一个 kind。此修复需要在线编译并重新安装后验证，不能仅凭编译通过判断问题已解决。

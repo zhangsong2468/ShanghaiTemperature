@@ -41,36 +41,36 @@ struct TemperatureProvider: TimelineProvider {
     }
 }
 
-struct FixedTemperatureWidget: Widget {
-    let period: ForecastPeriod
-
-    // Widget requires init(); the explicit period initializer is used by the
-    // bundle to create the three fixed configurations.
-    init() {
-        period = .week
+// Each Widget type has a stable configuration when WidgetKit reconstructs it
+// with init(). Do not reuse one stateful Widget type for different kinds.
+private func temperatureConfiguration(for period: ForecastPeriod) -> some WidgetConfiguration {
+    StaticConfiguration(kind: period.kind, provider: TemperatureProvider(period: period)) { entry in
+        TemperatureChartView(snapshot: entry.snapshot)
+            .containerBackground(for: .widget) { Color.clear }
     }
+    .configurationDisplayName("上海 · \(period.title)")
+    .description(period == .month ? "上海30天高低温长期趋势，仅供参考。" : "上海每日最高温、最低温曲线，固定摄氏度。")
+    .supportedFamilies([.systemMedium])
+    .contentMarginsDisabled()
+}
 
-    init(period: ForecastPeriod) {
-        self.period = period
-    }
+struct ShanghaiWeekWidget: Widget {
+    var body: some WidgetConfiguration { temperatureConfiguration(for: .week) }
+}
 
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: period.kind, provider: TemperatureProvider(period: period)) { entry in
-            TemperatureChartView(snapshot: entry.snapshot)
-                .containerBackground(for: .widget) { Color.clear }
-        }
-        .configurationDisplayName("上海 · \(period.title)")
-        .description(period == .month ? "上海30天高低温长期趋势，仅供参考。" : "上海每日最高温、最低温曲线，固定摄氏度。")
-        .supportedFamilies([.systemMedium])
-        .contentMarginsDisabled()
-    }
+struct ShanghaiFortnightWidget: Widget {
+    var body: some WidgetConfiguration { temperatureConfiguration(for: .fortnight) }
+}
+
+struct ShanghaiMonthWidget: Widget {
+    var body: some WidgetConfiguration { temperatureConfiguration(for: .month) }
 }
 
 @main
 struct ShanghaiTemperatureWidgets: WidgetBundle {
     var body: some Widget {
-        FixedTemperatureWidget(period: .week)
-        FixedTemperatureWidget(period: .fortnight)
-        FixedTemperatureWidget(period: .month)
+        ShanghaiWeekWidget()
+        ShanghaiFortnightWidget()
+        ShanghaiMonthWidget()
     }
 }
