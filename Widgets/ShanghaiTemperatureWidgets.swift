@@ -44,6 +44,16 @@ struct TemperatureProvider: TimelineProvider {
 struct FixedTemperatureWidget: Widget {
     let period: ForecastPeriod
 
+    // Widget requires init(); the explicit period initializer is used by the
+    // bundle to create the three fixed configurations.
+    init() {
+        period = .week
+    }
+
+    init(period: ForecastPeriod) {
+        self.period = period
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: period.kind, provider: TemperatureProvider(period: period)) { entry in
             TemperatureChartView(snapshot: entry.snapshot)
