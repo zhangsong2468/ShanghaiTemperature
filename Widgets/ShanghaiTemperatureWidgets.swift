@@ -48,8 +48,10 @@ private func temperatureConfiguration(for period: ForecastPeriod) -> some Widget
         TemperatureChartView(snapshot: entry.snapshot)
             .containerBackground(for: .widget) { Color.clear }
     }
-    .configurationDisplayName("上海 · \(period.title)")
-    .description(period == .month ? "上海30天高低温长期趋势，仅供参考。" : "上海每日最高温、最低温曲线，固定摄氏度。")
+    // WidgetKit rejects formatted LocalizedStringKey metadata at runtime.
+    // Force plain text instead of selecting the string-interpolation overload.
+    .configurationDisplayName(Text(verbatim: "上海 · " + period.title))
+    .description(Text(verbatim: period == .month ? "上海30天高低温长期趋势，仅供参考。" : "上海每日最高温、最低温曲线，固定摄氏度。"))
     .supportedFamilies([.systemMedium])
     .contentMarginsDisabled()
 }
