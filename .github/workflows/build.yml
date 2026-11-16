@@ -1,0 +1,100 @@
+name: Build Shanghai Temperature
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weather-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Structural checks
+        run: |
+          python3 scripts/generate_project.py
+          python3 scripts/validate_project.py
+          git diff --exit-code -- ShanghaiTemperature.xcodeproj App/Info.plist Widgets/Info.plist App/App.entitlements Widgets/Widgets.entitlements
+      - name: Data and cache tests
+        run: |
+          set -o pipefail
+          mkdir -p build
+          swift test --scratch-path build/CoreTests 2>&1 | tee build/core-tests.log
+      - name: Version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=0.2.0
+          if [[ "$REF_TYPE" == tag ]]; then version="${REF_NAME#v}"; fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Compile, sign and package
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: bash scripts/build-release.sh
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShanghaiTemperature-${{ steps.version.outputs.value }}-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.sha }}
+          path: build/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ShanghaiTemperature-*
+          path: dist
+          merge-multiple: true
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          cat > release-notes.md <<'EOF'
+          上海市固定天气小组件：7天、15天、30天气温曲线，摄氏度，透明风格，无配置项。
+
+          30天为ECMWF EC46集合平均长期趋势，仅供参考。天气数据由Open-Meteo提供（CC BY 4.0）。
+
+          这是个人预览版：应用与WidgetKit扩展均为ad-hoc签名，未经Apple公证。自动编译与数据测试通过不代表桌面组件已完成实机验证；首次运行可能被macOS提示限制。
+
+          下载DMG后将应用拖入“应用程序”，打开一次，再右键桌面→编辑小组件→搜索“上海温度”。附SHA256SUMS.txt校验文件。
+          EOF
+          gh release create "$TAG" --verify-tag --prerelease \
+            --title "上海温度 $TAG（预览版）" --notes-file release-notes.md dist/*

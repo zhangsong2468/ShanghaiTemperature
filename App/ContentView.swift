@@ -1,0 +1,64 @@
+import SwiftUI
+import WidgetKit
+
+struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var regular: WeatherSnapshot?
+    @State private var extended: WeatherSnapshot?
+    @State private var refreshing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Image(systemName: "chart.xyaxis.line")
+                    .font(.system(size: 24, weight: .light))
+                    .foregroundStyle(TemperaturePalette.minimum)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("上海温度").font(.title3).fontWeight(.medium)
+                    Text("上海 · 摄氏度 · 7 / 15 / 30 天")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Divider()
+            Text("右键点击桌面 → 编辑小组件 → 搜索“上海温度”")
+                .font(.callout).fixedSize(horizontal: false, vertical: true)
+            Text("关闭这个窗口后，桌面小组件仍由系统管理。")
+                .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("15天数据源：\(regular?.availability ?? "正在获取…")")
+                Text("30天数据源：\(extended?.availability ?? "正在获取…")")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            Link("数据来源：Open-Meteo · CC BY 4.0", destination: URL(string: "https://open-meteo.com/")!)
+                .font(.caption)
+        }
+        .padding(24)
+        .frame(width: 380)
+        .background(.ultraThinMaterial)
+        .task {
+            while !Task.isCancelled {
+                await refresh()
+                do { try await Task.sleep(nanoseconds: 15 * 60 * 1_000_000_000) }
+                catch { break }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await refresh() } }
+        }
+    }
+
+    @MainActor
+    private func refresh() async {
+        guard !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
+        async let normal = WeatherStore.shared.load(.fortnight)
+        async let trend = WeatherStore.shared.load(.month)
+        let (normalResult, trendResult) = await (normal, trend)
+        regular = normalResult
+        extended = trendResult
+        if normalResult.status == .fresh || trendResult.status == .fresh {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+}

@@ -1,0 +1,435 @@
+// !$*UTF8*$!
+{
+	"archiveVersion" = "1";
+	"classes" = {
+	};
+	"objectVersion" = "56";
+	"objects" = {
+		"2CC0AC3580CD2889ACEADAB9" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "App/ShanghaiTemperatureApp.swift";
+			"sourceTree" = "<group>";
+		};
+		"CA7C55708D5974AE116887EC" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "App/ContentView.swift";
+			"sourceTree" = "<group>";
+		};
+		"3F7811863981B6B2701AC7F3" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/WeatherModel.swift";
+			"sourceTree" = "<group>";
+		};
+		"E9539FD75E822C27C62AD6D8" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/TemperatureChartView.swift";
+			"sourceTree" = "<group>";
+		};
+		"08712BB81E2AAA444C553211" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/WeatherService.swift";
+			"sourceTree" = "<group>";
+		};
+		"01CE24A8B378AECB735A7AA1" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Widgets/ShanghaiTemperatureWidgets.swift";
+			"sourceTree" = "<group>";
+		};
+		"681C948D238C526E9E3424E0" = {
+			"isa" = "PBXFileReference";
+			"explicitFileType" = "wrapper.application";
+			"includeInIndex" = "0";
+			"path" = "ShanghaiTemperature.app";
+			"sourceTree" = "BUILT_PRODUCTS_DIR";
+		};
+		"BE4175710B03A81B1E49027A" = {
+			"isa" = "PBXFileReference";
+			"explicitFileType" = "wrapper.app-extension";
+			"includeInIndex" = "0";
+			"path" = "ShanghaiTemperatureWidgets.appex";
+			"sourceTree" = "BUILT_PRODUCTS_DIR";
+		};
+		"0A3E27B8CA818264D75C8D81" = {
+			"isa" = "PBXGroup";
+			"children" = ("681C948D238C526E9E3424E0", "BE4175710B03A81B1E49027A");
+			"name" = "Products";
+			"sourceTree" = "<group>";
+		};
+		"42C59AF8A4BAE559BC5A5D5D" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text";
+			"path" = "README.md";
+			"sourceTree" = "<group>";
+		};
+		"E72685212AF966A85FF3F9E9" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.plist.xml";
+			"path" = "App/Info.plist";
+			"sourceTree" = "<group>";
+		};
+		"96420B1F91BD6CB2374D9CB0" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.plist.xml";
+			"path" = "App/App.entitlements";
+			"sourceTree" = "<group>";
+		};
+		"F73AD719F865151D5B19EACD" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.plist.xml";
+			"path" = "Widgets/Info.plist";
+			"sourceTree" = "<group>";
+		};
+		"4C46736F696F71DC1154E264" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "text.plist.xml";
+			"path" = "Widgets/Widgets.entitlements";
+			"sourceTree" = "<group>";
+		};
+		"885C90F66F9A72E63491669F" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "wrapper.framework";
+			"name" = "SwiftUI.framework";
+			"path" = "System/Library/Frameworks/SwiftUI.framework";
+			"sourceTree" = "SDKROOT";
+		};
+		"48EEC15BE1C7088265DFDE66" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "wrapper.framework";
+			"name" = "Charts.framework";
+			"path" = "System/Library/Frameworks/Charts.framework";
+			"sourceTree" = "SDKROOT";
+		};
+		"5DD10D63FF0E52A3B382B8CE" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "wrapper.framework";
+			"name" = "WidgetKit.framework";
+			"path" = "System/Library/Frameworks/WidgetKit.framework";
+			"sourceTree" = "SDKROOT";
+		};
+		"06FA2F57AF41234CE10EAC65" = {
+			"isa" = "PBXGroup";
+			"children" = ("885C90F66F9A72E63491669F", "48EEC15BE1C7088265DFDE66", "5DD10D63FF0E52A3B382B8CE");
+			"name" = "Frameworks";
+			"sourceTree" = "<group>";
+		};
+		"19F479106CE8C3BA8C106518" = {
+			"isa" = "PBXGroup";
+			"children" = ("2CC0AC3580CD2889ACEADAB9", "CA7C55708D5974AE116887EC", "3F7811863981B6B2701AC7F3", "E9539FD75E822C27C62AD6D8", "08712BB81E2AAA444C553211", "01CE24A8B378AECB735A7AA1", "42C59AF8A4BAE559BC5A5D5D", "E72685212AF966A85FF3F9E9", "96420B1F91BD6CB2374D9CB0", "F73AD719F865151D5B19EACD", "4C46736F696F71DC1154E264", "06FA2F57AF41234CE10EAC65", "0A3E27B8CA818264D75C8D81");
+			"sourceTree" = "<group>";
+		};
+		"4717EADADFB85193942E8E9C" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "2CC0AC3580CD2889ACEADAB9";
+		};
+		"8695A8C8A3E51C079730F5E8" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "CA7C55708D5974AE116887EC";
+		};
+		"A3C2519131A0EF5D46C47251" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3F7811863981B6B2701AC7F3";
+		};
+		"42540954C8BD381C189DBF89" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E9539FD75E822C27C62AD6D8";
+		};
+		"1A349125E7C8F13E4EB3B9F4" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "08712BB81E2AAA444C553211";
+		};
+		"C7DEC6FCCD74FC72557EBA8A" = {
+			"isa" = "PBXSourcesBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ("4717EADADFB85193942E8E9C", "8695A8C8A3E51C079730F5E8", "A3C2519131A0EF5D46C47251", "42540954C8BD381C189DBF89", "1A349125E7C8F13E4EB3B9F4");
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"CCA64CE97280765648C8F9FC" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "885C90F66F9A72E63491669F";
+		};
+		"5E751A6728E0A827E7D90A25" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "48EEC15BE1C7088265DFDE66";
+		};
+		"C5A18757CF6D573DF6746EB5" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "5DD10D63FF0E52A3B382B8CE";
+		};
+		"2002E5C43A61715491C7A45B" = {
+			"isa" = "PBXFrameworksBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ("CCA64CE97280765648C8F9FC", "5E751A6728E0A827E7D90A25", "C5A18757CF6D573DF6746EB5");
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"88EAC1297EFC578EA1E87A58" = {
+			"isa" = "PBXResourcesBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"5AF0776BB07B1367A99FE456" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "ShanghaiTemperature";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.songa.ShanghaiTemperature";
+				"INFOPLIST_FILE" = "App/Info.plist";
+				"CODE_SIGN_ENTITLEMENTS" = "App/App.entitlements";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SDKROOT" = "macosx";
+				"SUPPORTED_PLATFORMS" = "macosx";
+				"ENABLE_HARDENED_RUNTIME" = "YES";
+				"CURRENT_PROJECT_VERSION" = "2";
+				"MARKETING_VERSION" = "0.2.0";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
+				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
+				"SWIFT_COMPILATION_MODE" = "singlefile";
+			};
+		};
+		"92CF243770F70A083086E5FC" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "ShanghaiTemperature";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.songa.ShanghaiTemperature";
+				"INFOPLIST_FILE" = "App/Info.plist";
+				"CODE_SIGN_ENTITLEMENTS" = "App/App.entitlements";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SDKROOT" = "macosx";
+				"SUPPORTED_PLATFORMS" = "macosx";
+				"ENABLE_HARDENED_RUNTIME" = "YES";
+				"CURRENT_PROJECT_VERSION" = "2";
+				"MARKETING_VERSION" = "0.2.0";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
+				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
+				"SWIFT_COMPILATION_MODE" = "wholemodule";
+			};
+		};
+		"184EDA24B5BED44E4662F462" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = ("5AF0776BB07B1367A99FE456", "92CF243770F70A083086E5FC");
+			"defaultConfigurationIsVisible" = "0";
+			"defaultConfigurationName" = "Release";
+		};
+		"811A9B772842F1AD73C1FDDF" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3F7811863981B6B2701AC7F3";
+		};
+		"325AC2B45AEAF04639148C4E" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "E9539FD75E822C27C62AD6D8";
+		};
+		"71721168F4B885F17863B5DB" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "08712BB81E2AAA444C553211";
+		};
+		"2CAB31B849D244C55A8B554E" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "01CE24A8B378AECB735A7AA1";
+		};
+		"40E5E086CEE0286EE0845214" = {
+			"isa" = "PBXSourcesBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ("811A9B772842F1AD73C1FDDF", "325AC2B45AEAF04639148C4E", "71721168F4B885F17863B5DB", "2CAB31B849D244C55A8B554E");
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"4C046ACE02F4B6428F34871B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "885C90F66F9A72E63491669F";
+		};
+		"1CCC5A9EC926042C7A5CEE5C" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "48EEC15BE1C7088265DFDE66";
+		};
+		"DC32CB18439A2AFFEE7E1EED" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "5DD10D63FF0E52A3B382B8CE";
+		};
+		"F5E9DB8C06FFEA059BC71CCA" = {
+			"isa" = "PBXFrameworksBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ("4C046ACE02F4B6428F34871B", "1CCC5A9EC926042C7A5CEE5C", "DC32CB18439A2AFFEE7E1EED");
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"E99FE1275B5274F752DC6583" = {
+			"isa" = "PBXResourcesBuildPhase";
+			"buildActionMask" = "2147483647";
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"0872FBF24890667DBC421F2C" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "ShanghaiTemperatureWidgets";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.songa.ShanghaiTemperature.Widgets";
+				"INFOPLIST_FILE" = "Widgets/Info.plist";
+				"CODE_SIGN_ENTITLEMENTS" = "Widgets/Widgets.entitlements";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SDKROOT" = "macosx";
+				"SUPPORTED_PLATFORMS" = "macosx";
+				"ENABLE_HARDENED_RUNTIME" = "YES";
+				"CURRENT_PROJECT_VERSION" = "2";
+				"MARKETING_VERSION" = "0.2.0";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
+				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
+				"SWIFT_COMPILATION_MODE" = "singlefile";
+				"APPLICATION_EXTENSION_API_ONLY" = "YES";
+				"SKIP_INSTALL" = "YES";
+			};
+		};
+		"6927A519DD6603816CDA536B" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "ShanghaiTemperatureWidgets";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.songa.ShanghaiTemperature.Widgets";
+				"INFOPLIST_FILE" = "Widgets/Info.plist";
+				"CODE_SIGN_ENTITLEMENTS" = "Widgets/Widgets.entitlements";
+				"GENERATE_INFOPLIST_FILE" = "NO";
+				"CODE_SIGN_STYLE" = "Automatic";
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SDKROOT" = "macosx";
+				"SUPPORTED_PLATFORMS" = "macosx";
+				"ENABLE_HARDENED_RUNTIME" = "YES";
+				"CURRENT_PROJECT_VERSION" = "2";
+				"MARKETING_VERSION" = "0.2.0";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
+				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
+				"SWIFT_COMPILATION_MODE" = "wholemodule";
+				"APPLICATION_EXTENSION_API_ONLY" = "YES";
+				"SKIP_INSTALL" = "YES";
+			};
+		};
+		"9FCB76E8A30A772CCE57FC73" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = ("0872FBF24890667DBC421F2C", "6927A519DD6603816CDA536B");
+			"defaultConfigurationIsVisible" = "0";
+			"defaultConfigurationName" = "Release";
+		};
+		"825B86C761149A6ECD80A528" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "BE4175710B03A81B1E49027A";
+			"settings" = {
+				"ATTRIBUTES" = ("RemoveHeadersOnCopy");
+			};
+		};
+		"6B3E090DB545F4D7E323DB6E" = {
+			"isa" = "PBXCopyFilesBuildPhase";
+			"buildActionMask" = "2147483647";
+			"dstPath" = "";
+			"dstSubfolderSpec" = "13";
+			"files" = ("825B86C761149A6ECD80A528");
+			"name" = "Embed App Extensions";
+			"runOnlyForDeploymentPostprocessing" = "0";
+		};
+		"01E77404E10F254C43E64C55" = {
+			"isa" = "PBXContainerItemProxy";
+			"containerPortal" = "244210E48437B6556980A702";
+			"proxyType" = "1";
+			"remoteGlobalIDString" = "2F8A7BAD25491C26655C51D8";
+			"remoteInfo" = "ShanghaiTemperatureWidgets";
+		};
+		"A4C2D386AB0259F33DCDC427" = {
+			"isa" = "PBXTargetDependency";
+			"target" = "2F8A7BAD25491C26655C51D8";
+			"targetProxy" = "01E77404E10F254C43E64C55";
+		};
+		"C1E9827DB735CA9BAA54A540" = {
+			"isa" = "PBXNativeTarget";
+			"buildConfigurationList" = "184EDA24B5BED44E4662F462";
+			"buildPhases" = ("C7DEC6FCCD74FC72557EBA8A", "2002E5C43A61715491C7A45B", "88EAC1297EFC578EA1E87A58", "6B3E090DB545F4D7E323DB6E");
+			"buildRules" = ();
+			"dependencies" = ("A4C2D386AB0259F33DCDC427");
+			"name" = "ShanghaiTemperature";
+			"productName" = "ShanghaiTemperature";
+			"productReference" = "681C948D238C526E9E3424E0";
+			"productType" = "com.apple.product-type.application";
+		};
+		"2F8A7BAD25491C26655C51D8" = {
+			"isa" = "PBXNativeTarget";
+			"buildConfigurationList" = "9FCB76E8A30A772CCE57FC73";
+			"buildPhases" = ("40E5E086CEE0286EE0845214", "F5E9DB8C06FFEA059BC71CCA", "E99FE1275B5274F752DC6583");
+			"buildRules" = ();
+			"dependencies" = ();
+			"name" = "ShanghaiTemperatureWidgets";
+			"productName" = "ShanghaiTemperatureWidgets";
+			"productReference" = "BE4175710B03A81B1E49027A";
+			"productType" = "com.apple.product-type.app-extension";
+		};
+		"5DF0EAF287A59303D4EFEAF3" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"buildSettings" = {
+				"CLANG_ENABLE_MODULES" = "YES";
+				"CLANG_ENABLE_OBJC_ARC" = "YES";
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SDKROOT" = "macosx";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf";
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG";
+			};
+		};
+		"C62D9534737287C44FD6EF43" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"buildSettings" = {
+				"CLANG_ENABLE_MODULES" = "YES";
+				"CLANG_ENABLE_OBJC_ARC" = "YES";
+				"SWIFT_VERSION" = "5.0";
+				"MACOSX_DEPLOYMENT_TARGET" = "14.0";
+				"SDKROOT" = "macosx";
+				"DEBUG_INFORMATION_FORMAT" = "dwarf-with-dsym";
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "";
+			};
+		};
+		"7ED5184A5487DF185E3420D0" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = ("5DF0EAF287A59303D4EFEAF3", "C62D9534737287C44FD6EF43");
+			"defaultConfigurationIsVisible" = "0";
+			"defaultConfigurationName" = "Release";
+		};
+		"244210E48437B6556980A702" = {
+			"isa" = "PBXProject";
+			"attributes" = {
+				"BuildIndependentTargetsInParallel" = "YES";
+				"LastUpgradeCheck" = "1600";
+				"TargetAttributes" = {
+					"C1E9827DB735CA9BAA54A540" = {
+						"CreatedOnToolsVersion" = "16.0";
+					};
+					"2F8A7BAD25491C26655C51D8" = {
+						"CreatedOnToolsVersion" = "16.0";
+					};
+				};
+			};
+			"buildConfigurationList" = "7ED5184A5487DF185E3420D0";
+			"compatibilityVersion" = "Xcode 14.0";
+			"developmentRegion" = "zh-Hans";
+			"hasScannedForEncodings" = "0";
+			"knownRegions" = ("zh-Hans", "en", "Base");
+			"mainGroup" = "19F479106CE8C3BA8C106518";
+			"productRefGroup" = "0A3E27B8CA818264D75C8D81";
+			"projectDirPath" = "";
+			"projectRoot" = "";
+			"targets" = ("C1E9827DB735CA9BAA54A540", "2F8A7BAD25491C26655C51D8");
+		};
+	};
+	"rootObject" = "244210E48437B6556980A702";
+}
