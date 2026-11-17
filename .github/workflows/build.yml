@@ -43,7 +43,7 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          version=0.2.4
+          version=0.2.5
           if [[ "$REF_TYPE" == tag ]]; then version="${REF_NAME#v}"; fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -88,9 +88,9 @@ jobs:
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           cat > release-notes.md <<'EOF'
-          上海市固定天气小组件：7天、15天、30天气温曲线，摄氏度，透明风格，无配置项。
+          上海市固定天气小组件：7天、15天、30天趋势，以及新增前后30天气温曲线，摄氏度，透明风格，无配置项。
 
-          30天为ECMWF EC46集合平均长期趋势，仅供参考。天气数据由Open-Meteo提供（CC BY 4.0）。
+          前后30天包含过去15天及从今天起15天，标记今天；过去部分为归档模型数据，并非气象站实测。原30天趋势仍为ECMWF EC46集合平均长期趋势，仅供参考。天气数据由Open-Meteo提供（CC BY 4.0）。
 
           这是个人预览版：应用与WidgetKit扩展均为ad-hoc签名，未经Apple公证。自动编译与数据测试通过不代表桌面组件已完成实机验证；首次运行可能被macOS提示限制。
 

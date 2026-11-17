@@ -68,11 +68,77 @@ struct ShanghaiMonthWidget: Widget {
     var body: some WidgetConfiguration { temperatureConfiguration(for: .month) }
 }
 
+struct RollingTemperatureEntry: TimelineEntry {
+    let date: Date
+    let snapshot: RollingTemperatureSnapshot
+}
+
+struct RollingTemperatureProvider: TimelineProvider {
+    func placeholder(in context: Context) -> RollingTemperatureEntry {
+        let date = Date()
+        let start = ShanghaiTime.calendar.date(byAdding: .day, value: -15,
+            to: ShanghaiTime.calendar.startOfDay(for: date))!
+        // Gallery artwork only. These synthetic curves never appear as live data.
+        let days = (0..<30).map { index in
+            TemperatureDay(index: index,
+                date: ShanghaiTime.calendar.date(byAdding: .day, value: index, to: start)!,
+                maximum: SampleWeather.maximum[index % 15], minimum: SampleWeather.minimum[index % 15])
+        }
+        return RollingTemperatureEntry(date: date,
+            snapshot: RollingTemperatureSnapshot(days: days, status: .sample, fetchedAt: nil))
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (RollingTemperatureEntry) -> Void) {
+        if context.isPreview { completion(placeholder(in: context)); return }
+        Task {
+            let snapshot = await WeatherStore.shared.loadRollingMonth()
+            let now = Date()
+            completion(RollingTemperatureEntry(date: now, snapshot: snapshot.projected(at: now)))
+        }
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<RollingTemperatureEntry>) -> Void) {
+        Task {
+            let snapshot = await WeatherStore.shared.loadRollingMonth()
+            let now = Date()
+            var dates = [now]
+            let nextHour = ShanghaiTime.calendar.dateInterval(of: .hour, for: now)!.end
+            dates += (0..<49).map { nextHour.addingTimeInterval(Double($0) * 3600) }
+            // Include Shanghai midnight explicitly for the rolling date window.
+            dates += [ShanghaiTime.nextMidnight(after: now)]
+            if let fetched = snapshot.fetchedAt {
+                dates += [fetched.addingTimeInterval(ForecastRecord.refreshInterval),
+                          fetched.addingTimeInterval(ForecastRecord.maximumCacheAge + 1)].filter { $0 > now }
+            }
+            let entries = Array(Set(dates)).sorted().map {
+                RollingTemperatureEntry(date: $0, snapshot: snapshot.projected(at: $0))
+            }
+            completion(Timeline(entries: entries,
+                policy: .after(WeatherStore.nextRefresh(for: snapshot, after: now))))
+        }
+    }
+
+}
+
+struct ShanghaiRollingMonthWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "ShanghaiTemperature.Rolling30Days", provider: RollingTemperatureProvider()) { entry in
+            RollingTemperatureChartView(snapshot: entry.snapshot, date: entry.date)
+                .containerBackground(for: .widget) { Color.clear }
+        }
+        .configurationDisplayName(Text(verbatim: "上海 · 前后30天"))
+        .description(Text(verbatim: "过去15天与从今天起15天的最高温、最低温曲线，合计30天，固定摄氏度。"))
+        .supportedFamilies([.systemMedium])
+        .contentMarginsDisabled()
+    }
+}
+
 @main
 struct ShanghaiTemperatureWidgets: WidgetBundle {
     var body: some Widget {
         ShanghaiWeekWidget()
         ShanghaiFortnightWidget()
         ShanghaiMonthWidget()
+        ShanghaiRollingMonthWidget()
     }
 }

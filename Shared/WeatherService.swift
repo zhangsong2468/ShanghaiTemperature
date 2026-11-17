@@ -1,8 +1,9 @@
 import Foundation
 
 enum ForecastSource: String, Codable, Sendable {
-    case regular, extended
+    case regular, extended, rollingMonth
     var count: Int { self == .regular ? 15 : 30 }
+    var startOffset: Int { self == .rollingMonth ? -15 : 0 }
     static func source(for period: ForecastPeriod) -> ForecastSource {
         period == .month ? .extended : .regular
     }
@@ -10,16 +11,17 @@ enum ForecastSource: String, Codable, Sendable {
     var url: URL {
         var url = URLComponents()
         url.scheme = "https"
-        url.host = self == .regular ? "api.open-meteo.com" : "seasonal-api.open-meteo.com"
-        url.path = self == .regular ? "/v1/forecast" : "/v1/seasonal"
+        url.host = self == .extended ? "seasonal-api.open-meteo.com" : "api.open-meteo.com"
+        url.path = self == .extended ? "/v1/seasonal" : "/v1/forecast"
         url.queryItems = [
             URLQueryItem(name: "latitude", value: "31.2304"),
             URLQueryItem(name: "longitude", value: "121.4737"),
             URLQueryItem(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
             URLQueryItem(name: "temperature_unit", value: "celsius"),
             URLQueryItem(name: "timezone", value: "Asia/Shanghai"),
-            URLQueryItem(name: "forecast_days", value: String(count))
+            URLQueryItem(name: "forecast_days", value: String(self == .rollingMonth ? 15 : count))
         ]
+        if self == .rollingMonth { url.queryItems?.append(URLQueryItem(name: "past_days", value: "15")) }
         if self == .extended { url.queryItems?.append(URLQueryItem(name: "models", value: "ecmwf_ec46")) }
         return url.url!
     }
@@ -58,6 +60,16 @@ struct ForecastRecord: Codable, Sendable {
             ? .stale : justFetched ? .fresh : .cached
         return WeatherSnapshot(period: period, days: selected, status: status, fetchedAt: fetchedAt)
     }
+
+    func rollingSnapshot(at now: Date, justFetched: Bool = false) -> RollingTemperatureSnapshot {
+        guard source == .rollingMonth else {
+            return RollingTemperatureSnapshot(days: [], status: .unavailable, fetchedAt: fetchedAt)
+        }
+        let initial = RollingTemperatureSnapshot(days: days,
+            status: justFetched ? .fresh : .cached, fetchedAt: fetchedAt)
+        return initial.projected(at: now)
+    }
+
 }
 
 enum ForecastDecoder {
@@ -97,7 +109,7 @@ enum ForecastDecoder {
         let today = ShanghaiTime.calendar.startOfDay(for: fetchedAt)
         let dates = try response.daily.dates.enumerated().map { index, text -> Date in
             guard let date = ShanghaiTime.parseDay(text),
-                  date == ShanghaiTime.calendar.date(byAdding: .day, value: index, to: today) else {
+                  date == ShanghaiTime.calendar.date(byAdding: .day, value: source.startOffset + index, to: today) else {
                 throw WeatherError.invalidDates
             }
             return date
@@ -137,7 +149,7 @@ enum ForecastDecoder {
         guard record.version == 1, record.source == source, record.days.count == source.count else { return false }
         let firstDate = ShanghaiTime.calendar.startOfDay(for: record.fetchedAt)
         return record.days.enumerated().allSatisfy { index, day in
-            day.index == index && day.date == ShanghaiTime.calendar.date(byAdding: .day, value: index, to: firstDate)
+            day.index == index && day.date == ShanghaiTime.calendar.date(byAdding: .day, value: source.startOffset + index, to: firstDate)
                 && day.maximum.isFinite && day.minimum.isFinite
                 && (-90...65).contains(day.maximum) && (-90...65).contains(day.minimum)
                 && day.maximum >= day.minimum
@@ -154,7 +166,7 @@ actor WeatherStore {
     private var retryAfter: [ForecastSource: Date] = [:]
 
     init(directory: URL? = nil, session: URLSession? = nil) {
-        // App and extension each use their own sandbox. All three widgets live
+        // App and extension each use their own sandbox. All widgets live
         // in one extension and share its cache; no App Group entitlement needed.
         self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ShanghaiTemperature/Weather-v1", isDirectory: true)
@@ -226,6 +238,55 @@ actor WeatherStore {
             return cached?.snapshot(for: period, at: Date())
                 ?? WeatherSnapshot(period: period, days: [], status: .unavailable, fetchedAt: nil)
         }
+    }
+
+    func loadRollingMonth(now: Date = Date()) async -> RollingTemperatureSnapshot {
+        let source = ForecastSource.rollingMonth
+        let cached = read(source)
+        if let cached, cached.isFresh(at: now) { return cached.rollingSnapshot(at: now) }
+        if let retry = retryAfter[source], retry > now {
+            return cached?.rollingSnapshot(at: now)
+                ?? RollingTemperatureSnapshot(days: [], status: .unavailable, fetchedAt: nil)
+        }
+        // This source has a separate file and in-flight task. Existing forecasts
+        // keep their original requests, cache files and refresh behavior.
+        let task: Task<ForecastRecord, Error>
+        if let pending = inFlight[source] { task = pending } else {
+            let session = self.session
+            task = Task {
+                var request = URLRequest(url: source.url)
+                request.timeoutInterval = 12
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse else { throw WeatherError.invalidResponse }
+                guard (200..<300).contains(http.statusCode) else { throw WeatherError.httpStatus(http.statusCode) }
+                guard data.count <= 2_000_000 else { throw WeatherError.invalidResponse }
+                return try ForecastDecoder.decode(data, source: source, fetchedAt: Date())
+            }
+            inFlight[source] = task
+        }
+        do {
+            let record = try await task.value
+            inFlight[source] = nil
+            retryAfter[source] = nil
+            records[source] = record
+            persist(record)
+            return record.rollingSnapshot(at: max(Date(), record.fetchedAt), justFetched: true)
+        } catch {
+            inFlight[source] = nil
+            retryAfter[source] = Date().addingTimeInterval(30 * 60)
+            return cached?.rollingSnapshot(at: Date())
+                ?? RollingTemperatureSnapshot(days: [], status: .unavailable, fetchedAt: nil)
+        }
+    }
+
+    static func nextRefresh(for snapshot: RollingTemperatureSnapshot, after now: Date) -> Date {
+        let due: Date
+        if snapshot.status == .stale || snapshot.status == .unavailable {
+            due = now.addingTimeInterval(30 * 60)
+        } else {
+            due = (snapshot.fetchedAt ?? now).addingTimeInterval(ForecastRecord.refreshInterval)
+        }
+        return max(now.addingTimeInterval(60), min(due, ShanghaiTime.nextMidnight(after: now)))
     }
 
     static func nextRefresh(for snapshot: WeatherSnapshot, after now: Date) -> Date {

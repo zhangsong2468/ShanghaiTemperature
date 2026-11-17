@@ -67,6 +67,38 @@ struct WeatherSnapshot: Sendable {
     }
 }
 
+// Separate from forecast-only WeatherSnapshot: this window includes archived model
+// data, not station observations. Today occupies index 15 in a complete window.
+struct RollingTemperatureSnapshot: Sendable {
+    static let pastDays = 15
+    static let forecastDays = 15 // Includes today.
+    static let count = pastDays + forecastDays
+    let days: [TemperatureDay]
+    let status: WeatherStatus
+    let fetchedAt: Date?
+
+    func projected(at now: Date) -> RollingTemperatureSnapshot {
+        guard let fetchedAt else { return self }
+        let age = now.timeIntervalSince(fetchedAt)
+        guard age >= 0, age <= ForecastRecord.maximumCacheAge else {
+            return RollingTemperatureSnapshot(days: [], status: .unavailable, fetchedAt: fetchedAt)
+        }
+        let today = ShanghaiTime.calendar.startOfDay(for: now)
+        let start = ShanghaiTime.calendar.date(byAdding: .day, value: -Self.pastDays, to: today)!
+        let end = ShanghaiTime.calendar.date(byAdding: .day, value: Self.forecastDays, to: today)!
+        let selected = days.filter { $0.date >= start && $0.date < end }.map { day in
+            // Keep calendar positions after midnight; never fill absent future days.
+            TemperatureDay(index: ShanghaiTime.calendar.dateComponents([.day], from: start, to: day.date).day!,
+                date: day.date, maximum: day.maximum, minimum: day.minimum)
+        }
+        let old = status == .stale || age >= ForecastRecord.refreshInterval
+            || !ShanghaiTime.calendar.isDate(fetchedAt, inSameDayAs: now)
+            || selected.count != Self.count
+        return RollingTemperatureSnapshot(days: selected,
+            status: selected.isEmpty ? .unavailable : old ? .stale : status, fetchedAt: fetchedAt)
+    }
+}
+
 enum ShanghaiTime {
     static let zone = TimeZone(identifier: "Asia/Shanghai")!
     static var calendar: Calendar {

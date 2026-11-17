@@ -35,7 +35,7 @@ final class WeatherServiceTests: XCTestCase {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = ShanghaiTime.zone
         formatter.dateFormat = "yyyy-MM-dd"
-        let dates = (0..<source.count).map { formatter.string(from: ShanghaiTime.calendar.date(byAdding: .day, value: $0, to: start)!) }
+        let dates = (0..<source.count).map { formatter.string(from: ShanghaiTime.calendar.date(byAdding: .day, value: source.startOffset + $0, to: start)!) }
         var daily: [String: Any] = ["time": dates]
         var units: [String: String] = [:]
         let suffixes = source == .extended ? [""] + (1...50).map { String(format: "_member%02d", $0) } : [""]
@@ -48,6 +48,63 @@ final class WeatherServiceTests: XCTestCase {
         var json: [String: Any] = ["timezone": "Asia/Shanghai", "daily_units": units, "daily": daily]
         mutate?(&json)
         return try JSONSerialization.data(withJSONObject: json)
+    }
+
+    func testRollingMonthRequestAndThirtyDayWindow() throws {
+        let url = ForecastSource.rollingMonth.url
+        XCTAssertEqual(url.host, "api.open-meteo.com")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(items.first(where: { $0.name == "past_days" })?.value, "15")
+        XCTAssertEqual(items.first(where: { $0.name == "forecast_days" })?.value, "15")
+        let record = try ForecastDecoder.decode(payload(.rollingMonth, now: fixed), source: .rollingMonth, fetchedAt: fixed)
+        XCTAssertTrue(ForecastDecoder.validateCached(record, source: .rollingMonth))
+        XCTAssertFalse(ForecastDecoder.validateCached(record, source: .extended))
+        let snapshot = record.rollingSnapshot(at: fixed, justFetched: true)
+        XCTAssertEqual(snapshot.status, .fresh)
+        XCTAssertEqual(snapshot.days.count, 30)
+        XCTAssertEqual(snapshot.days[15].date, ShanghaiTime.calendar.startOfDay(for: fixed))
+        XCTAssertEqual(ShanghaiTime.label(snapshot.days[0].date), "11/1")
+        XCTAssertEqual(ShanghaiTime.label(snapshot.days[29].date), "11/30")
+    }
+
+    func testRollingMonthCrossesYearAndRetainsHistoryAfterMidnight() throws {
+        let fetched = ShanghaiTime.parseDay("2026-12-31")!.addingTimeInterval(23 * 3600)
+        let record = try ForecastDecoder.decode(payload(.rollingMonth, now: fetched), source: .rollingMonth, fetchedAt: fetched)
+        let midnight = ShanghaiTime.nextMidnight(after: fetched)
+        let initial = record.rollingSnapshot(at: fetched)
+        let next = initial.projected(at: midnight)
+        XCTAssertEqual(next.days.count, 29)
+        XCTAssertEqual(next.days.first?.index, 0)
+        XCTAssertEqual(next.days.last?.index, 28)
+        XCTAssertEqual(next.days[15].date, midnight)
+        XCTAssertEqual(ShanghaiTime.label(next.days.first!.date), "12/17")
+        XCTAssertEqual(ShanghaiTime.label(next.days.last!.date), "1/14")
+        XCTAssertEqual(next.status, .stale)
+        XCTAssertTrue(initial.projected(at: fetched.addingTimeInterval(49 * 3600)).days.isEmpty)
+        XCTAssertTrue(initial.projected(at: fetched.addingTimeInterval(-1)).days.isEmpty)
+    }
+
+    func testRollingMonthRejectsMissingDuplicateNullAndInvalidTemperatures() throws {
+        for change in ["missing", "duplicate", "null", "reversed", "unit", "timezone"] {
+            let data = try payload(.rollingMonth, now: fixed) { json in
+                var daily = json["daily"] as! [String: Any]
+                if change == "missing" || change == "duplicate" {
+                    var dates = daily["time"] as! [String]
+                    if change == "missing" { dates.removeLast() } else { dates[1] = dates[0] }
+                    daily["time"] = dates
+                } else if change == "null" {
+                    var values = daily["temperature_2m_min"] as! [Any]
+                    values[0] = NSNull(); daily["temperature_2m_min"] = values
+                } else if change == "reversed" {
+                    daily["temperature_2m_min"] = Array(repeating: 30.0, count: 30)
+                } else if change == "unit" {
+                    var units = json["daily_units"] as! [String: String]
+                    units["temperature_2m_min"] = "°F"; json["daily_units"] = units
+                } else { json["timezone"] = "GMT" }
+                json["daily"] = daily
+            }
+            XCTAssertThrowsError(try ForecastDecoder.decode(data, source: .rollingMonth, fetchedAt: fixed), change)
+        }
     }
 
     func testRegularCelsiusAndDates() throws {
@@ -125,6 +182,71 @@ final class WeatherServiceTests: XCTestCase {
         let session = URLSession(configuration: config)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         return (WeatherStore(directory: directory, session: session), directory, session)
+    }
+
+    func testRollingRequestsShareTaskPersistAndReloadFromDisk() async throws {
+        let body = try payload(.rollingMonth, now: Date())
+        let (store, directory, session) = try fixtureStore { request in
+            let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+            XCTAssertEqual(items.first(where: { $0.name == "past_days" })?.value, "15")
+            return (200, body)
+        }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        async let first = store.loadRollingMonth()
+        async let second = store.loadRollingMonth()
+        let (a, b) = await (first, second)
+        XCTAssertEqual(a.days.count, 30)
+        XCTAssertEqual(b.days.count, 30)
+        XCTAssertEqual(a.status, .fresh)
+        XCTAssertEqual(StubWeatherProtocol.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("rollingMonth.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("regular.json").path))
+        let reopened = WeatherStore(directory: directory, session: session)
+        let disk = await reopened.loadRollingMonth()
+        XCTAssertEqual(disk.status, .cached)
+        XCTAssertEqual(disk.days.count, 30)
+        XCTAssertEqual(StubWeatherProtocol.count, 1)
+    }
+
+    func testRollingOfflineRetainsPastDatesAndThrottlesRetries() async throws {
+        let (store, directory, session) = try fixtureStore { _ in throw URLError(.notConnectedToInternet) }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        let old = Date().addingTimeInterval(-4 * 3600)
+        let record = try ForecastDecoder.decode(payload(.rollingMonth, now: old), source: .rollingMonth, fetchedAt: old)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(record).write(to: directory.appendingPathComponent("rollingMonth.json"))
+        let result = await store.loadRollingMonth()
+        XCTAssertEqual(result.status, .stale)
+        XCTAssertEqual(result.fetchedAt, old)
+        let today = ShanghaiTime.calendar.startOfDay(for: Date())
+        XCTAssertEqual(result.days.filter { $0.date < today }.count, 15)
+        XCTAssertTrue(result.days.count == 29 || result.days.count == 30)
+        _ = await store.loadRollingMonth()
+        XCTAssertEqual(StubWeatherProtocol.count, 1)
+    }
+
+    func testRollingExpiredCacheAndHTTPFailureShowUnavailable() async throws {
+        let (store, directory, session) = try fixtureStore { _ in (429, Data("{}".utf8)) }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        let old = Date().addingTimeInterval(-49 * 3600)
+        let record = try ForecastDecoder.decode(payload(.rollingMonth, now: old), source: .rollingMonth, fetchedAt: old)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(record).write(to: directory.appendingPathComponent("rollingMonth.json"))
+        let result = await store.loadRollingMonth()
+        XCTAssertEqual(result.status, .unavailable)
+        XCTAssertTrue(result.days.isEmpty)
+        _ = await store.loadRollingMonth()
+        XCTAssertEqual(StubWeatherProtocol.count, 1)
+    }
+
+    func testRollingRefreshUsesThreeHoursMidnightAndFailureRetry() {
+        let fresh = RollingTemperatureSnapshot(days: [], status: .fresh, fetchedAt: fixed)
+        XCTAssertEqual(WeatherStore.nextRefresh(for: fresh, after: fixed), fixed.addingTimeInterval(3 * 3600))
+        let late = ShanghaiTime.parseDay("2026-11-16")!.addingTimeInterval(23 * 3600)
+        let evening = RollingTemperatureSnapshot(days: [], status: .fresh, fetchedAt: late)
+        XCTAssertEqual(WeatherStore.nextRefresh(for: evening, after: late), ShanghaiTime.nextMidnight(after: late))
+        let unavailable = RollingTemperatureSnapshot(days: [], status: .unavailable, fetchedAt: nil)
+        XCTAssertEqual(WeatherStore.nextRefresh(for: unavailable, after: fixed), fixed.addingTimeInterval(30 * 60))
     }
 
     func testConcurrentSevenAndFifteenShareRequestAndPersist() async throws {
