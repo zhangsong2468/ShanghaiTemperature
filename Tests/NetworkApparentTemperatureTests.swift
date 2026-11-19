@@ -81,14 +81,20 @@ final class NetworkApparentTemperatureTests: XCTestCase {
         }
         defer { session.invalidateAndCancel();try? FileManager.default.removeItem(at:directory) }
         let date=ShanghaiTime.parseDay("2026-11-19")!
-        do {
-            _ = try await provider.comparisonYears(grid:grid,years:[2025],around:date,radii:[0])
-            XCTFail("First request should finish one preparation batch")
-        } catch NetworkThermalError.historyPreparing(let count,let total) {
-            XCTAssertEqual(count,1);XCTAssertEqual(total,1)
+        for ready in 1...3 {
+            do {
+                _ = try await provider.comparisonYears(grid:grid,years:[2022,2023,2024],around:date,radii:[0])
+                XCTFail("Each request should finish one preparation batch")
+            } catch NetworkThermalError.historyPreparing(let count,let total) {
+                XCTAssertEqual(count,ready)
+                XCTAssertEqual(total,3)
+            }
         }
-        let years=try await provider.comparisonYears(grid:grid,years:[2025],around:date,radii:[0])
-        XCTAssertEqual(years[0].anchor,[44.4,44.4,44.4])
+        let years=try await provider.comparisonYears(grid:grid,years:[2022,2023,2024],around:date,radii:[0])
+        XCTAssertEqual(years.map(\.year),[2022,2023,2024])
+        for year in years {
+            XCTAssertEqual(year.anchor,[44.4,44.4,44.4])
+        }
     }
 
     func testRejectsWrongUnitsAndDoesNotFallbackWhenOffline() async throws {
