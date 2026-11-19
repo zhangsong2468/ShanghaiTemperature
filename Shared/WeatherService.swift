@@ -1,9 +1,10 @@
 import Foundation
 
 enum ForecastSource: String, Codable, Sendable {
-    case regular, extended, rollingMonth
+    case regular, extended, rollingMonth, hangzhouRollingMonth
     var count: Int { self == .regular ? 15 : 30 }
-    var startOffset: Int { self == .rollingMonth ? -15 : 0 }
+    var isRolling: Bool { self == .rollingMonth || self == .hangzhouRollingMonth }
+    var startOffset: Int { isRolling ? -15 : 0 }
     static func source(for period: ForecastPeriod) -> ForecastSource {
         period == .month ? .extended : .regular
     }
@@ -14,14 +15,14 @@ enum ForecastSource: String, Codable, Sendable {
         url.host = self == .extended ? "seasonal-api.open-meteo.com" : "api.open-meteo.com"
         url.path = self == .extended ? "/v1/seasonal" : "/v1/forecast"
         url.queryItems = [
-            URLQueryItem(name: "latitude", value: "31.2304"),
-            URLQueryItem(name: "longitude", value: "121.4737"),
+            URLQueryItem(name: "latitude", value: self == .hangzhouRollingMonth ? "30.2741" : "31.2304"),
+            URLQueryItem(name: "longitude", value: self == .hangzhouRollingMonth ? "120.1551" : "121.4737"),
             URLQueryItem(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
             URLQueryItem(name: "temperature_unit", value: "celsius"),
             URLQueryItem(name: "timezone", value: "Asia/Shanghai"),
-            URLQueryItem(name: "forecast_days", value: String(self == .rollingMonth ? 15 : count))
+            URLQueryItem(name: "forecast_days", value: String(isRolling ? 15 : count))
         ]
-        if self == .rollingMonth { url.queryItems?.append(URLQueryItem(name: "past_days", value: "15")) }
+        if isRolling { url.queryItems?.append(URLQueryItem(name: "past_days", value: "15")) }
         if self == .extended { url.queryItems?.append(URLQueryItem(name: "models", value: "ecmwf_ec46")) }
         return url.url!
     }
@@ -62,7 +63,7 @@ struct ForecastRecord: Codable, Sendable {
     }
 
     func rollingSnapshot(at now: Date, justFetched: Bool = false) -> RollingTemperatureSnapshot {
-        guard source == .rollingMonth else {
+        guard source.isRolling else {
             return RollingTemperatureSnapshot(days: [], status: .unavailable, fetchedAt: fetchedAt)
         }
         let initial = RollingTemperatureSnapshot(days: days,
@@ -241,7 +242,14 @@ actor WeatherStore {
     }
 
     func loadRollingMonth(now: Date = Date()) async -> RollingTemperatureSnapshot {
-        let source = ForecastSource.rollingMonth
+        await loadRolling(source: .rollingMonth, now: now)
+    }
+
+    func loadHangzhouRollingMonth(now: Date = Date()) async -> RollingTemperatureSnapshot {
+        await loadRolling(source: .hangzhouRollingMonth, now: now)
+    }
+
+    private func loadRolling(source: ForecastSource, now: Date) async -> RollingTemperatureSnapshot {
         let cached = read(source)
         if let cached, cached.isFresh(at: now) { return cached.rollingSnapshot(at: now) }
         if let retry = retryAfter[source], retry > now {

@@ -184,6 +184,114 @@ final class WeatherServiceTests: XCTestCase {
         return (WeatherStore(directory: directory, session: session), directory, session)
     }
 
+    func testHangzhouRollingWindowCoordinatesAndCacheIdentity() throws {
+        let url = ForecastSource.hangzhouRollingMonth.url
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(url.host, "api.open-meteo.com")
+        for (key, value) in [("latitude", "30.2741"), ("longitude", "120.1551"),
+                             ("past_days", "15"), ("forecast_days", "15"),
+                             ("temperature_unit", "celsius"), ("timezone", "Asia/Shanghai")] {
+            XCTAssertEqual(query.first(where: { $0.name == key })?.value, value)
+        }
+        let record = try ForecastDecoder.decode(payload(.hangzhouRollingMonth, now: fixed),
+            source: .hangzhouRollingMonth, fetchedAt: fixed)
+        XCTAssertTrue(ForecastDecoder.validateCached(record, source: .hangzhouRollingMonth))
+        XCTAssertFalse(ForecastDecoder.validateCached(record, source: .rollingMonth))
+        let snapshot = record.rollingSnapshot(at: fixed)
+        XCTAssertEqual(snapshot.days.count, 30)
+        XCTAssertEqual(snapshot.days[15].date, ShanghaiTime.calendar.startOfDay(for: fixed))
+        let next = snapshot.projected(at: ShanghaiTime.nextMidnight(after: fixed))
+        XCTAssertEqual(next.days.count, 29)
+        XCTAssertEqual(next.status, .stale)
+    }
+
+    func testHangzhouAndShanghaiRequestsAndDiskCachesStaySeparate() async throws {
+        let shanghai = try payload(.rollingMonth, now: Date())
+        let hangzhou = try payload(.hangzhouRollingMonth, now: Date()) { json in
+            var daily = json["daily"] as! [String: Any]
+            daily["temperature_2m_max"] = Array(repeating: 25.0, count: 30)
+            json["daily"] = daily
+        }
+        let (store, directory, session) = try fixtureStore { request in
+            let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+            let latitude = items.first(where: { $0.name == "latitude" })?.value
+            return (200, latitude == "30.2741" ? hangzhou : shanghai)
+        }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        async let sh = store.loadRollingMonth()
+        async let hz = store.loadHangzhouRollingMonth()
+        let (s, h) = await (sh, hz)
+        XCTAssertEqual(s.days.first?.maximum, 15)
+        XCTAssertEqual(h.days.first?.maximum, 25)
+        XCTAssertEqual(StubWeatherProtocol.count, 2)
+        for filename in ["rollingMonth.json", "hangzhouRollingMonth.json"] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent(filename).path))
+        }
+        let reopened = WeatherStore(directory: directory, session: session)
+        let disk = await reopened.loadHangzhouRollingMonth()
+        XCTAssertEqual(disk.status, .cached)
+        XCTAssertEqual(disk.days.first?.maximum, 25)
+        XCTAssertEqual(StubWeatherProtocol.count, 2)
+    }
+
+    func testHangzhouOfflineKeepsHistoryAndDoesNotUseShanghaiCache() async throws {
+        let (store, directory, session) = try fixtureStore { _ in throw URLError(.notConnectedToInternet) }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        let old = Date().addingTimeInterval(-4 * 3600)
+        let hz = try ForecastDecoder.decode(payload(.hangzhouRollingMonth, now: old),
+            source: .hangzhouRollingMonth, fetchedAt: old)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(hz).write(to: directory.appendingPathComponent("hangzhouRollingMonth.json"))
+        let result = await store.loadHangzhouRollingMonth()
+        XCTAssertEqual(result.status, .stale)
+        XCTAssertEqual(result.fetchedAt, old)
+        let today = ShanghaiTime.calendar.startOfDay(for: Date())
+        XCTAssertEqual(result.days.filter { $0.date < today }.count, 15)
+        XCTAssertTrue(result.days.count == 29 || result.days.count == 30)
+        _ = await store.loadHangzhouRollingMonth()
+        XCTAssertEqual(StubWeatherProtocol.count, 1)
+
+        // Shanghai still requests its own source and cannot consume Hangzhou data.
+        let shanghai = await store.loadRollingMonth()
+        XCTAssertEqual(shanghai.status, .unavailable)
+        XCTAssertTrue(shanghai.days.isEmpty)
+        XCTAssertEqual(StubWeatherProtocol.count, 2)
+    }
+
+    func testHangzhouRejectsExpiredCorruptAndWrongCityCaches() async throws {
+        for invalid in ["expired", "corrupt", "wrongCity"] {
+            let (store, directory, session) = try fixtureStore { _ in (503, Data("{}".utf8)) }
+            defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent("hangzhouRollingMonth.json")
+            if invalid == "corrupt" {
+                try Data("broken".utf8).write(to: file)
+            } else {
+                let source: ForecastSource = invalid == "wrongCity" ? .rollingMonth : .hangzhouRollingMonth
+                let fetched = invalid == "expired" ? Date().addingTimeInterval(-49 * 3600) : Date()
+                let record = try ForecastDecoder.decode(payload(source, now: fetched), source: source, fetchedAt: fetched)
+                try JSONEncoder().encode(record).write(to: file)
+            }
+            let result = await store.loadHangzhouRollingMonth()
+            XCTAssertEqual(result.status, .unavailable, invalid)
+            XCTAssertTrue(result.days.isEmpty, invalid)
+            _ = await store.loadHangzhouRollingMonth()
+            XCTAssertEqual(StubWeatherProtocol.count, 1, invalid)
+        }
+    }
+
+    func testHangzhouConcurrentRequestsShareOneFetch() async throws {
+        let body = try payload(.hangzhouRollingMonth, now: Date())
+        let (store, directory, session) = try fixtureStore { _ in (200, body) }
+        defer { session.invalidateAndCancel(); try? FileManager.default.removeItem(at: directory) }
+        async let first = store.loadHangzhouRollingMonth()
+        async let second = store.loadHangzhouRollingMonth()
+        let (a, b) = await (first, second)
+        XCTAssertEqual(a.days.count, 30)
+        XCTAssertEqual(b.days.count, 30)
+        XCTAssertEqual(StubWeatherProtocol.count, 1)
+    }
+
     func testRollingRequestsShareTaskPersistAndReloadFromDisk() async throws {
         let body = try payload(.rollingMonth, now: Date())
         let (store, directory, session) = try fixtureStore { request in

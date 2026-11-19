@@ -74,6 +74,15 @@ struct RollingTemperatureEntry: TimelineEntry {
 }
 
 struct RollingTemperatureProvider: TimelineProvider {
+    let isHangzhou: Bool
+
+    init(isHangzhou: Bool = false) { self.isHangzhou = isHangzhou }
+
+    private func loadSnapshot() async -> RollingTemperatureSnapshot {
+        if isHangzhou { return await WeatherStore.shared.loadHangzhouRollingMonth() }
+        return await WeatherStore.shared.loadRollingMonth()
+    }
+
     func placeholder(in context: Context) -> RollingTemperatureEntry {
         let date = Date()
         let start = ShanghaiTime.calendar.date(byAdding: .day, value: -15,
@@ -91,7 +100,7 @@ struct RollingTemperatureProvider: TimelineProvider {
     func getSnapshot(in context: Context, completion: @escaping (RollingTemperatureEntry) -> Void) {
         if context.isPreview { completion(placeholder(in: context)); return }
         Task {
-            let snapshot = await WeatherStore.shared.loadRollingMonth()
+            let snapshot = await loadSnapshot()
             let now = Date()
             completion(RollingTemperatureEntry(date: now, snapshot: snapshot.projected(at: now)))
         }
@@ -99,7 +108,7 @@ struct RollingTemperatureProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RollingTemperatureEntry>) -> Void) {
         Task {
-            let snapshot = await WeatherStore.shared.loadRollingMonth()
+            let snapshot = await loadSnapshot()
             let now = Date()
             var dates = [now]
             let nextHour = ShanghaiTime.calendar.dateInterval(of: .hour, for: now)!.end
@@ -133,6 +142,20 @@ struct ShanghaiRollingMonthWidget: Widget {
     }
 }
 
+struct HangzhouRollingMonthWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "ShanghaiTemperature.HangzhouRolling30Days",
+                            provider: RollingTemperatureProvider(isHangzhou: true)) { entry in
+            RollingTemperatureChartView(snapshot: entry.snapshot, date: entry.date, cityName: "杭州")
+                .containerBackground(for: .widget) { Color.clear }
+        }
+        .configurationDisplayName(Text(verbatim: "杭州 · 前后30天"))
+        .description(Text(verbatim: "杭州过去15天与今起15天的最高温、最低温曲线，合计30天，固定摄氏度。"))
+        .supportedFamilies([.systemMedium])
+        .contentMarginsDisabled()
+    }
+}
+
 @main
 struct ShanghaiTemperatureWidgets: WidgetBundle {
     var body: some Widget {
@@ -140,5 +163,6 @@ struct ShanghaiTemperatureWidgets: WidgetBundle {
         ShanghaiFortnightWidget()
         ShanghaiMonthWidget()
         ShanghaiRollingMonthWidget()
+        HangzhouRollingMonthWidget()
     }
 }

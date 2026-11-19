@@ -115,6 +115,13 @@ struct TemperatureChartView: View {
 struct RollingTemperatureChartView: View {
     let snapshot: RollingTemperatureSnapshot
     let date: Date
+    let cityName: String
+
+    init(snapshot: RollingTemperatureSnapshot, date: Date, cityName: String = "上海") {
+        self.snapshot = snapshot
+        self.date = date
+        self.cityName = cityName
+    }
 
     private var start: Date {
         ShanghaiTime.calendar.date(byAdding: .day, value: -15,
@@ -141,7 +148,7 @@ struct RollingTemperatureChartView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 5) {
-                Text("上海").fontWeight(.medium)
+                Text(verbatim: cityName).fontWeight(.medium)
                 Text("· 前后30天").foregroundStyle(.secondary)
                 Spacer(minLength: 3)
                 Text("°C").foregroundStyle(.secondary)
@@ -195,7 +202,7 @@ struct RollingTemperatureChartView: View {
                         AxisValueLabel().font(.system(size: 9))
                     }
                 }
-                .accessibilityLabel("上海前后30天，过去15天及从今天起15天，每日最高温与最低温，摄氏度")
+                .accessibilityLabel(Text(verbatim: cityName + "前后30天，过去15天及今起15天，每日最高温与最低温，摄氏度"))
             }
 
             HStack(spacing: 8) {
@@ -205,7 +212,7 @@ struct RollingTemperatureChartView: View {
                 Text(footer).foregroundStyle(.secondary)
             }
             .font(.system(size: 9))
-            Text("过去15天 · 今天起15天 · 模型数据")
+            Text("过去15天 · 今起15天")
                 .font(.system(size: 9)).foregroundStyle(.secondary)
         }
         .padding(13)
