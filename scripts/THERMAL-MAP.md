@@ -6,13 +6,13 @@ Geometry is extracted from the already-downloaded Natural Earth 1:10m administra
 
 The map raster uses inverse-distance interpolation of the actual sample apparent temperatures. The neighbour count comes from step 3. Interpolated temperatures are classified using the final width-capped cuts, so every display interval remains at most 3°C. The colour field crosses administrative boundaries and is clipped to the combined region outline. Sparse 100-point interpolation is a modelled regional depiction, not a precise mountain/coastal observation map.
 
-Temperature ranges are directly labelled beside the map with leaders to each rendered band's eastern edge. Only the ten required lowercase place labels are included, without city temperatures. City labels use collision candidates and a reserved right-side range-label column. Actual text layout and clipping still require WidgetKit visual verification.
+Temperature ranges use short nearby leaders on any side of the rendered map, or direct labels fully inside their own colour band. Candidate anchors come from the largest visible connected component of each band; labels are not placed in temperature order or forced into a right-side column. Temperature labels have priority over place-name placement. The nine lowercase place labels are suzhou, xuzhou, suqian, nanjing, hangzhou, ningbo, shanghai, lishui and qiandaohu. The widget footer does not show the source-name line; source/licence information remains in the shipped resource notices. Actual text layout and clipping still require WidgetKit visual verification.
 
 Palette hue principally follows absolute apparent temperature (blue/cyan through amber/orange/red), while approximate apparent solar longitude provides a small, continuous seasonal adjustment across all 24 terms. No month/day season switches are hard-coded. Formula is Meeus-style; exact term-time boundaries must be checked against authoritative almanacs before release. At unexpectedly hot/cold times the temperature still wins over the seasonal theme.
 
 The gallery/placeholder asset is the actual archived 2025-11-19 15:00 local-formula replay with a visible “历史回放 · 非实时” label. Installed widgets show an honest waiting state at this stage; step 5 connects live weather, source mode, cache, preparation progress and refresh. Historical gallery data is never used as a live error fallback.
 
-Checks: resource geometry rings/bounds, exactly ten labels, replay sample counts and <=3°C display widths, projection round-trip, structural source/resource membership. Native Swift compilation, raster performance, text placement and WidgetKit rendering have NOT been verified here.
+Checks: resource geometry rings/bounds, exactly nine labels, replay sample counts and <=3°C display widths, projection round-trip, structural source/resource membership. Native Swift compilation, raster performance, text placement and WidgetKit rendering have NOT been verified here.
 
 
 ## Calendar-day solar-term display

@@ -26,9 +26,9 @@ class ThermalMapTests(unittest.TestCase):
                     self.assertEqual(ring[0],ring[-1])
                     self.assertTrue(all(west<=x<=east and south<=y<=north for x,y in ring))
 
-    def test_exact_ten_lowercase_labels(self):
+    def test_exact_nine_lowercase_labels(self):
         self.assertEqual([l['name'] for l in self.g['labels']],
-            ['suzhou','xuzhou','suqian','nanjing','changzhou','wenzhou','ningbo','shanghai','lishui','qiandaohu'])
+            ['suzhou','xuzhou','suqian','nanjing','hangzhou','ningbo','shanghai','lishui','qiandaohu'])
         self.assertTrue(all(l['name']==l['name'].lower() for l in self.g['labels']))
 
     def test_replay_is_explicitly_archived_and_preserves_width_cap(self):
