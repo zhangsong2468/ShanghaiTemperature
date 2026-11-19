@@ -9,7 +9,7 @@ final class SolarTermCalendarTests: XCTestCase {
         XCTAssertFalse(ordinary.isTermDay)
         XCTAssertTrue(ordinary.usesPublishedCalendar)
         let midnight=ShanghaiTime.parseDay("2026-11-22")!
-        for seconds in [0.0,12*3600,24*3600-1] {
+        for seconds in ([0, 12 * 3600, 24 * 3600 - 1] as [TimeInterval]) {
             let status=SolarTermCalendar.status(at:midnight.addingTimeInterval(seconds))
             XCTAssertEqual(status.label,"小雪")
             XCTAssertTrue(status.isTermDay)
