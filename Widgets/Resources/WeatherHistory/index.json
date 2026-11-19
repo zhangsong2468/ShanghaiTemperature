@@ -7225,13 +7225,11 @@
   "source": "https://open-meteo.com/en/docs/historical-weather-api",
   "license": "CC BY 4.0",
   "labels": [
-    "suzhou",
     "xuzhou",
     "suqian",
     "nanjing",
     "changzhou",
     "wenzhou",
-    "ningbo",
     "shanghai",
     "lishui",
     "qiandaohu"
