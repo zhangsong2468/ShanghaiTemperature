@@ -33,7 +33,7 @@ else
 fi
 [[ "$owner" =~ ^[A-Za-z0-9-]+$ ]]
 REPO="$owner/ShanghaiTemperature"
-VERSION=0.2.7
+VERSION=0.2.8
 cd "$ROOT"
 python3 scripts/validate_project.py
 if [[ ! -d .git ]]; then git init -b main; fi
@@ -61,7 +61,7 @@ fi
 if [[ "$RELEASE" == true ]]; then
   tag="v$VERSION"
   if git rev-parse "$tag" >/dev/null 2>&1; then
-    [[ "$(git rev-parse "$tag")" == "$(git rev-parse HEAD)" ]] || {
+    [[ "$(git rev-parse "${tag}^{commit}")" == "$(git rev-parse HEAD)" ]] || {
       echo '版本标签已指向其他提交，已停止；不会强制覆盖。' >&2; exit 2;
     }
   else
