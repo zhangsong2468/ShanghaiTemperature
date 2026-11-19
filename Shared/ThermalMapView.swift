@@ -190,6 +190,12 @@ struct ThermalMapView: View {
         self.raster=display.snapshot.flatMap { snapshot in geometry.flatMap { ThermalMapRaster.image(snapshot:snapshot,geometry:$0) } }
     }
 
+    private var mapFailureMessage: String {
+        if geometry == nil { return "地图资源读取失败" }
+        if display.snapshot == nil { return display.message }
+        return "地图图像生成失败"
+    }
+
     var body: some View {
         VStack(alignment:.leading,spacing:5) {
             HStack {
@@ -203,7 +209,7 @@ struct ThermalMapView: View {
             } else {
                 VStack(spacing:8) {
                     Image(systemName:"map").font(.system(size:26,weight:.light))
-                    Text(display.message).font(.system(size:11)).multilineTextAlignment(.center)
+                    Text(mapFailureMessage).font(.system(size:11)).multilineTextAlignment(.center)
                 }.foregroundStyle(.secondary).frame(maxWidth:.infinity,maxHeight:.infinity)
             }
             HStack {

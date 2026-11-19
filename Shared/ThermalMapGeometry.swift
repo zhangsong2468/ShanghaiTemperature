@@ -13,8 +13,9 @@ struct ThermalMapGeometry: Decodable, Sendable {
             throw CocoaError(.fileNoSuchFile)
         }
         let value = try JSONDecoder().decode(Self.self, from: Data(contentsOf: folder.appendingPathComponent("geometry.json")))
-        guard value.schema == 1, value.bounds.count == 4, value.labels.count == 10,
-              Set(value.labels.map(\.name)).count == 10,
+        guard value.schema == 1, value.bounds.count == 4, !value.labels.isEmpty,
+              Set(value.labels.map(\.name)).count == value.labels.count,
+              value.labels.allSatisfy({ !$0.name.isEmpty && $0.latitude.isFinite && $0.longitude.isFinite }),
               Set(value.regions.map(\.name)) == Set(["jiangsu","zhejiang","shanghai"]) else {
             throw CocoaError(.fileReadCorruptFile)
         }
