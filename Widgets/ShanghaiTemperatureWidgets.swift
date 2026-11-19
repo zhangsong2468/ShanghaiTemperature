@@ -163,6 +163,6 @@ struct ShanghaiTemperatureWidgets: WidgetBundle {
         ShanghaiFortnightWidget()
         ShanghaiMonthWidget()
         ShanghaiRollingMonthWidget()
-        HangzhouRollingMonthWidget()
+        AdditionalTemperatureWidgets().body
     }
 }

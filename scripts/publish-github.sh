@@ -33,7 +33,7 @@ else
 fi
 [[ "$owner" =~ ^[A-Za-z0-9-]+$ ]]
 REPO="$owner/ShanghaiTemperature"
-VERSION=0.2.6
+VERSION=0.2.7
 cd "$ROOT"
 python3 scripts/validate_project.py
 if [[ ! -d .git ]]; then git init -b main; fi
@@ -56,7 +56,7 @@ gh auth setup-git --hostname github.com
 git add -- .github .gitignore App Shared Widgets Tests scripts Package.swift README.md ShanghaiTemperature.xcodeproj
 if ! git diff --cached --quiet; then
   git -c user.name="$owner" -c user.email="$owner@users.noreply.github.com" \
-    commit -m '实现上海温度小组件、天气缓存与GitHub线上构建'
+    commit -m '新增江浙沪体感地图、历史比较与体感来源开关'
 fi
 if [[ "$RELEASE" == true ]]; then
   tag="v$VERSION"

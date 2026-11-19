@@ -7,6 +7,8 @@ struct ContentView: View {
     @State private var regular: WeatherSnapshot?
     @State private var extended: WeatherSnapshot?
     @State private var refreshing = false
+    @State private var useLocalThermal = ThermalSourceSettings.current == .local
+    @State private var thermalSettingError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -31,6 +33,27 @@ struct ContentView: View {
                 Text("30天数据源：\(extended?.availability ?? "正在获取…")")
             }
             .font(.caption).foregroundStyle(.secondary)
+            Toggle("本地计算地图体感", isOn: Binding(
+                get: { useLocalThermal },
+                set: { enabled in
+                    do {
+                        try ThermalSourceSettings.save(enabled ? .local : .network)
+                        useLocalThermal = enabled
+                        thermalSettingError = nil
+                        WidgetCenter.shared.reloadTimelines(ofKind: "ShanghaiTemperature.RegionalThermalMap")
+                    } catch {
+                        thermalSettingError = "设置未保存，请稍后重试。"
+                    }
+                }))
+                .toggleStyle(.switch)
+                .font(.callout)
+            Text(useLocalThermal
+                 ? "地图体感由气温、湿度和风速在本机计算。"
+                 : "地图体感使用网络数据；首次使用需准备往年同期数据。")
+                .font(.caption).foregroundStyle(.secondary)
+            if let thermalSettingError {
+                Text(thermalSettingError).font(.caption).foregroundStyle(.secondary)
+            }
             Link("数据来源：Open-Meteo · CC BY 4.0", destination: URL(string: "https://open-meteo.com/")!)
                 .font(.caption)
         }

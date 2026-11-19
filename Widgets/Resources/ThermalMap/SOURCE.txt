@@ -1,0 +1,3 @@
+Geographic geometry: Natural Earth 1:10m admin-1 states/provinces; public domain.
+https://www.naturalearthdata.com/about/terms-of-use/
+Extracted Jiangsu, Zhejiang and Shanghai; WGS84 longitude/latitude, rounded to 5 decimals. City label coordinates are approximate place centres, not weather measurement stations.

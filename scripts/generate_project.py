@@ -21,7 +21,11 @@ def plist(path, value):
 
 sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift',
            'Shared/WeatherModel.swift', 'Shared/TemperatureChartView.swift', 'Shared/WeatherService.swift',
-           'Widgets/ShanghaiTemperatureWidgets.swift']
+           'Shared/HistoricalWeatherArchive.swift', 'Shared/ThermalComparison.swift',
+           'Shared/ThermalSourceSettings.swift', 'Shared/NetworkApparentTemperature.swift',
+           'Shared/DynamicThermalBands.swift', 'Shared/ThermalMapGeometry.swift', 'Shared/ThermalMapView.swift', 'Shared/SolarTermCalendar.swift', 'Shared/ThermalSurface.swift',
+           'Shared/RegionalThermalStore.swift', 'Shared/RegionalCurrentWeather.swift', 'Shared/ThermalTimingAnalysis.swift',
+           'Widgets/ShanghaiTemperatureWidgets.swift', 'Widgets/RegionalThermalMapWidget.swift']
 refs = {}
 for path in sources:
     refs[path] = obj('file:'+path, 'PBXFileReference', lastKnownFileType='sourcecode.swift',
@@ -36,7 +40,11 @@ for path in ['README.md','App/Info.plist','App/App.entitlements','Widgets/Info.p
     extra.append(obj('file:'+path, 'PBXFileReference', lastKnownFileType='text.plist.xml' if path.endswith(('.plist','.entitlements')) else 'text', path=path, sourceTree='<group>'))
 asset_ref = obj('app-assets', 'PBXFileReference', lastKnownFileType='folder.assetcatalog', path='App/Assets.xcassets', sourceTree='<group>')
 notice_ref = obj('icon-notice', 'PBXFileReference', lastKnownFileType='text', path='App/Resources/Meteocons-LICENSE.txt', sourceTree='<group>')
-extra += [asset_ref, notice_ref]
+history_ref = obj('weather-history', 'PBXFileReference', lastKnownFileType='folder',
+                  path='Widgets/Resources/WeatherHistory', sourceTree='<group>')
+map_ref = obj('thermal-map', 'PBXFileReference', lastKnownFileType='folder',
+              path='Widgets/Resources/ThermalMap', sourceTree='<group>')
+extra += [asset_ref, notice_ref, history_ref, map_ref]
 framework_refs = []
 for fw in ['SwiftUI', 'Charts', 'WidgetKit']:
     framework_refs.append(obj('framework:'+fw, 'PBXFileReference', lastKnownFileType='wrapper.framework',
@@ -51,7 +59,7 @@ for extension in [False, True]:
     obj(prefix+':sources', 'PBXSourcesBuildPhase', buildActionMask='2147483647', files=builds, runOnlyForDeploymentPostprocessing='0')
     frameworks = [obj(prefix+':framework:'+str(i),'PBXBuildFile',fileRef=ref) for i,ref in enumerate(framework_refs)]
     obj(prefix+':frameworks','PBXFrameworksBuildPhase',buildActionMask='2147483647',files=frameworks,runOnlyForDeploymentPostprocessing='0')
-    resources = [] if extension else [obj('app-assets-build','PBXBuildFile',fileRef=asset_ref), obj('icon-notice-build','PBXBuildFile',fileRef=notice_ref)]
+    resources = [obj('weather-history-build','PBXBuildFile',fileRef=history_ref), obj('thermal-map-build','PBXBuildFile',fileRef=map_ref)] if extension else [obj('app-assets-build','PBXBuildFile',fileRef=asset_ref), obj('icon-notice-build','PBXBuildFile',fileRef=notice_ref)]
     obj(prefix+':resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=resources,runOnlyForDeploymentPostprocessing='0')
     config_ids = []
     for config in ['Debug','Release']:
@@ -63,7 +71,7 @@ for extension in [False, True]:
             'GENERATE_INFOPLIST_FILE':'NO','CODE_SIGN_STYLE':'Automatic',
             'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','SDKROOT':'macosx',
             'SUPPORTED_PLATFORMS':'macosx', 'ENABLE_HARDENED_RUNTIME':'YES',
-            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.2.6',
+            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.2.7',
             'LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks']+(['@executable_path/../../../../Frameworks'] if extension else []),
             'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O',
             'SWIFT_COMPILATION_MODE':'singlefile' if config=='Debug' else 'wholemodule',
@@ -106,7 +114,10 @@ base={'CFBundleDevelopmentRegion':'zh-Hans','CFBundleExecutable':'$(EXECUTABLE_N
 plist('App/Info.plist',base|{'CFBundlePackageType':'APPL','NSPrincipalClass':'NSApplication','LSApplicationCategoryType':'public.app-category.weather'})
 plist('Widgets/Info.plist',base|{'CFBundlePackageType':'XPC!','NSExtension':{'NSExtensionPointIdentifier':'com.apple.widgetkit-extension'}})
 for path in ['App/App.entitlements','Widgets/Widgets.entitlements']:
-    plist(path,{'com.apple.security.app-sandbox':True,'com.apple.security.network.client':True})
+    access = 'read-only' if path.startswith('Widgets/') else 'read-write'
+    plist(path,{'com.apple.security.app-sandbox':True,'com.apple.security.network.client':True,
+        'com.apple.security.temporary-exception.shared-preference.'+access:
+            ['com.songa.ShanghaiTemperature.ThermalPreferences']})
 app_id=uid('app-target')
 (ROOT/'ShanghaiTemperature.xcodeproj/xcshareddata/xcschemes/ShanghaiTemperature.xcscheme').write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
 <Scheme LastUpgradeVersion="1600" version="1.3">

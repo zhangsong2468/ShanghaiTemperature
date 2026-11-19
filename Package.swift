@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.library(name: "WeatherCore", targets: ["WeatherCore"])],
     targets: [
-        .target(name: "WeatherCore", path: "Shared", exclude: ["TemperatureChartView.swift"]),
+        .target(name: "WeatherCore", path: "Shared", exclude: ["TemperatureChartView.swift", "ThermalMapView.swift"]),
         .testTarget(name: "WeatherCoreTests", dependencies: ["WeatherCore"], path: "Tests")
     ]
 )

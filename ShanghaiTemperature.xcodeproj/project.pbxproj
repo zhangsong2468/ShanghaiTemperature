@@ -35,10 +35,88 @@
 			"path" = "Shared/WeatherService.swift";
 			"sourceTree" = "<group>";
 		};
+		"4D78E1765F3465252F5D4425" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/HistoricalWeatherArchive.swift";
+			"sourceTree" = "<group>";
+		};
+		"F269A6E135F00CC1F23E5519" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/ThermalComparison.swift";
+			"sourceTree" = "<group>";
+		};
+		"0DB55C644CBF364E6D801D9A" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/ThermalSourceSettings.swift";
+			"sourceTree" = "<group>";
+		};
+		"856CD297E353E74F6B1E03EF" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/NetworkApparentTemperature.swift";
+			"sourceTree" = "<group>";
+		};
+		"2AB1C2DCBBB01B234639B419" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/DynamicThermalBands.swift";
+			"sourceTree" = "<group>";
+		};
+		"8574E3D8081D40F9551E0A74" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/ThermalMapGeometry.swift";
+			"sourceTree" = "<group>";
+		};
+		"54CFEFBEF76CF735B7E36675" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/ThermalMapView.swift";
+			"sourceTree" = "<group>";
+		};
+		"5323DA4CD7449F06B9BEF01B" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/SolarTermCalendar.swift";
+			"sourceTree" = "<group>";
+		};
+		"0F8ABE023310AAD407B0A9E9" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/ThermalSurface.swift";
+			"sourceTree" = "<group>";
+		};
+		"92FC84CF15AF78F537FA9375" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/RegionalThermalStore.swift";
+			"sourceTree" = "<group>";
+		};
+		"4FA8DAE3F3E44E8F1E79F005" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/RegionalCurrentWeather.swift";
+			"sourceTree" = "<group>";
+		};
+		"8E51F2AB0C18B85B04D1903F" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Shared/ThermalTimingAnalysis.swift";
+			"sourceTree" = "<group>";
+		};
 		"01CE24A8B378AECB735A7AA1" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
 			"path" = "Widgets/ShanghaiTemperatureWidgets.swift";
+			"sourceTree" = "<group>";
+		};
+		"8AF1A2C51280E19A591361B7" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "Widgets/RegionalThermalMapWidget.swift";
 			"sourceTree" = "<group>";
 		};
 		"681C948D238C526E9E3424E0" = {
@@ -103,6 +181,18 @@
 			"path" = "App/Resources/Meteocons-LICENSE.txt";
 			"sourceTree" = "<group>";
 		};
+		"91645622EBCF04006ABD2F3A" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "folder";
+			"path" = "Widgets/Resources/WeatherHistory";
+			"sourceTree" = "<group>";
+		};
+		"F1370ABC7A569BDD0AA42E3B" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "folder";
+			"path" = "Widgets/Resources/ThermalMap";
+			"sourceTree" = "<group>";
+		};
 		"885C90F66F9A72E63491669F" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "wrapper.framework";
@@ -132,7 +222,7 @@
 		};
 		"19F479106CE8C3BA8C106518" = {
 			"isa" = "PBXGroup";
-			"children" = ("2CC0AC3580CD2889ACEADAB9", "CA7C55708D5974AE116887EC", "3F7811863981B6B2701AC7F3", "E9539FD75E822C27C62AD6D8", "08712BB81E2AAA444C553211", "01CE24A8B378AECB735A7AA1", "42C59AF8A4BAE559BC5A5D5D", "E72685212AF966A85FF3F9E9", "96420B1F91BD6CB2374D9CB0", "F73AD719F865151D5B19EACD", "4C46736F696F71DC1154E264", "87C56CF165B4DAF887A57513", "8B972F83B83354AE1241E2F6", "06FA2F57AF41234CE10EAC65", "0A3E27B8CA818264D75C8D81");
+			"children" = ("2CC0AC3580CD2889ACEADAB9", "CA7C55708D5974AE116887EC", "3F7811863981B6B2701AC7F3", "E9539FD75E822C27C62AD6D8", "08712BB81E2AAA444C553211", "4D78E1765F3465252F5D4425", "F269A6E135F00CC1F23E5519", "0DB55C644CBF364E6D801D9A", "856CD297E353E74F6B1E03EF", "2AB1C2DCBBB01B234639B419", "8574E3D8081D40F9551E0A74", "54CFEFBEF76CF735B7E36675", "5323DA4CD7449F06B9BEF01B", "0F8ABE023310AAD407B0A9E9", "92FC84CF15AF78F537FA9375", "4FA8DAE3F3E44E8F1E79F005", "8E51F2AB0C18B85B04D1903F", "01CE24A8B378AECB735A7AA1", "8AF1A2C51280E19A591361B7", "42C59AF8A4BAE559BC5A5D5D", "E72685212AF966A85FF3F9E9", "96420B1F91BD6CB2374D9CB0", "F73AD719F865151D5B19EACD", "4C46736F696F71DC1154E264", "87C56CF165B4DAF887A57513", "8B972F83B83354AE1241E2F6", "91645622EBCF04006ABD2F3A", "F1370ABC7A569BDD0AA42E3B", "06FA2F57AF41234CE10EAC65", "0A3E27B8CA818264D75C8D81");
 			"sourceTree" = "<group>";
 		};
 		"4717EADADFB85193942E8E9C" = {
@@ -155,10 +245,58 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "08712BB81E2AAA444C553211";
 		};
+		"E87755B8FF0943F17C3E3A4F" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "4D78E1765F3465252F5D4425";
+		};
+		"4F0E8FF63E73EB24EB402305" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "F269A6E135F00CC1F23E5519";
+		};
+		"363179948380CC15B9C117EA" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "0DB55C644CBF364E6D801D9A";
+		};
+		"24DFA1D2240001B493D33B0F" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "856CD297E353E74F6B1E03EF";
+		};
+		"67887D518E56BBE4BC642452" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "2AB1C2DCBBB01B234639B419";
+		};
+		"29F2D2646EC295C65A6AAEA6" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8574E3D8081D40F9551E0A74";
+		};
+		"3F73F3504566CA1F9F4219C9" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "54CFEFBEF76CF735B7E36675";
+		};
+		"9F6AD2D37EB3343155F9EE97" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "5323DA4CD7449F06B9BEF01B";
+		};
+		"74F8817D061A1BC42DC1B503" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "0F8ABE023310AAD407B0A9E9";
+		};
+		"C921A8E765A3B774D89D2ABC" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "92FC84CF15AF78F537FA9375";
+		};
+		"93D87C9371F8656AC320BF86" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "4FA8DAE3F3E44E8F1E79F005";
+		};
+		"CF225B77ECB539EF5D922E58" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8E51F2AB0C18B85B04D1903F";
+		};
 		"C7DEC6FCCD74FC72557EBA8A" = {
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = "2147483647";
-			"files" = ("4717EADADFB85193942E8E9C", "8695A8C8A3E51C079730F5E8", "A3C2519131A0EF5D46C47251", "42540954C8BD381C189DBF89", "1A349125E7C8F13E4EB3B9F4");
+			"files" = ("4717EADADFB85193942E8E9C", "8695A8C8A3E51C079730F5E8", "A3C2519131A0EF5D46C47251", "42540954C8BD381C189DBF89", "1A349125E7C8F13E4EB3B9F4", "E87755B8FF0943F17C3E3A4F", "4F0E8FF63E73EB24EB402305", "363179948380CC15B9C117EA", "24DFA1D2240001B493D33B0F", "67887D518E56BBE4BC642452", "29F2D2646EC295C65A6AAEA6", "3F73F3504566CA1F9F4219C9", "9F6AD2D37EB3343155F9EE97", "74F8817D061A1BC42DC1B503", "C921A8E765A3B774D89D2ABC", "93D87C9371F8656AC320BF86", "CF225B77ECB539EF5D922E58");
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
 		"CCA64CE97280765648C8F9FC" = {
@@ -209,7 +347,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.6";
+				"MARKETING_VERSION" = "0.2.7";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"SWIFT_COMPILATION_MODE" = "singlefile";
@@ -232,7 +370,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.6";
+				"MARKETING_VERSION" = "0.2.7";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"SWIFT_COMPILATION_MODE" = "wholemodule";
@@ -257,14 +395,66 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "08712BB81E2AAA444C553211";
 		};
+		"6B47A02ADFC6432753812545" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "4D78E1765F3465252F5D4425";
+		};
+		"88A56C5FA642EF20E5BE3A9C" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "F269A6E135F00CC1F23E5519";
+		};
+		"292BBAA6ECE5FC4EE82B441B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "0DB55C644CBF364E6D801D9A";
+		};
+		"64CBEA272E50A16935E91EF5" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "856CD297E353E74F6B1E03EF";
+		};
+		"4944F3D6245A618A9D37A470" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "2AB1C2DCBBB01B234639B419";
+		};
+		"E9A3BFDDA846B6BD6F8FEB64" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8574E3D8081D40F9551E0A74";
+		};
+		"0D88BB94947FD5E4619233D8" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "54CFEFBEF76CF735B7E36675";
+		};
+		"46B9495EC98A7C058017394C" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "5323DA4CD7449F06B9BEF01B";
+		};
+		"E63492024FCCD55C73D8634A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "0F8ABE023310AAD407B0A9E9";
+		};
+		"77C1EB7AB71A63F6B03A0808" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "92FC84CF15AF78F537FA9375";
+		};
+		"A7C6A1745E254642D0DA94CB" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "4FA8DAE3F3E44E8F1E79F005";
+		};
+		"D4AAD569369F12E0B722A6C9" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8E51F2AB0C18B85B04D1903F";
+		};
 		"2CAB31B849D244C55A8B554E" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "01CE24A8B378AECB735A7AA1";
 		};
+		"5AB892FB549151F4FC6871C9" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "8AF1A2C51280E19A591361B7";
+		};
 		"40E5E086CEE0286EE0845214" = {
 			"isa" = "PBXSourcesBuildPhase";
 			"buildActionMask" = "2147483647";
-			"files" = ("811A9B772842F1AD73C1FDDF", "325AC2B45AEAF04639148C4E", "71721168F4B885F17863B5DB", "2CAB31B849D244C55A8B554E");
+			"files" = ("811A9B772842F1AD73C1FDDF", "325AC2B45AEAF04639148C4E", "71721168F4B885F17863B5DB", "6B47A02ADFC6432753812545", "88A56C5FA642EF20E5BE3A9C", "292BBAA6ECE5FC4EE82B441B", "64CBEA272E50A16935E91EF5", "4944F3D6245A618A9D37A470", "E9A3BFDDA846B6BD6F8FEB64", "0D88BB94947FD5E4619233D8", "46B9495EC98A7C058017394C", "E63492024FCCD55C73D8634A", "77C1EB7AB71A63F6B03A0808", "A7C6A1745E254642D0DA94CB", "D4AAD569369F12E0B722A6C9", "2CAB31B849D244C55A8B554E", "5AB892FB549151F4FC6871C9");
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
 		"4C046ACE02F4B6428F34871B" = {
@@ -285,10 +475,18 @@
 			"files" = ("4C046ACE02F4B6428F34871B", "1CCC5A9EC926042C7A5CEE5C", "DC32CB18439A2AFFEE7E1EED");
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
+		"9DFFFB1FE7CD925EFA040958" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "91645622EBCF04006ABD2F3A";
+		};
+		"1E2596A04A0B309F48A94770" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "F1370ABC7A569BDD0AA42E3B";
+		};
 		"E99FE1275B5274F752DC6583" = {
 			"isa" = "PBXResourcesBuildPhase";
 			"buildActionMask" = "2147483647";
-			"files" = ();
+			"files" = ("9DFFFB1FE7CD925EFA040958", "1E2596A04A0B309F48A94770");
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
 		"0872FBF24890667DBC421F2C" = {
@@ -307,7 +505,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.6";
+				"MARKETING_VERSION" = "0.2.7";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"SWIFT_COMPILATION_MODE" = "singlefile";
@@ -331,7 +529,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.2.6";
+				"MARKETING_VERSION" = "0.2.7";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"SWIFT_COMPILATION_MODE" = "wholemodule";

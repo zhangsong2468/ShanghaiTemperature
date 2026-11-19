@@ -11,3 +11,13 @@ xcuserdata/
 *.mobileprovision
 *.provisionprofile
 *.log
+
+# Historical map research: large source data and generated diagnostics
+research/temperature-map/data/
+research/temperature-map/logs/
+research/temperature-map/outputs/
+__pycache__/
+
+*.py[cod]
+
+Widgets/Resources/history-pack-verification.json

@@ -1,0 +1,3 @@
+Weather data by Open-Meteo: https://open-meteo.com/
+ERA5 reanalysis, CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Converted to indexed fixed-point binary without dropping samples or changing supplied numeric precision.

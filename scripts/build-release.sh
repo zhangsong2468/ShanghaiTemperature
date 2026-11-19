@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-0.2.6}"
+VERSION="${VERSION:-0.2.7}"
 BUILD_NUMBER="${BUILD_NUMBER:-2}"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   echo 'Invalid version or build number.' >&2; exit 2
@@ -20,6 +20,21 @@ APP="$PWD/build/App/Build/Products/Release/ShanghaiTemperature.app"
 EXT="$APP/Contents/PlugIns/ShanghaiTemperatureWidgets.appex"
 test -d "$EXT"
 test -f "$APP/Contents/Resources/AppIcon.icns"
+# Check that complete map/history assets actually reached the built extension.
+python3 - "$EXT/Contents/Resources" <<'PYARCHIVE'
+import hashlib,json,sys
+from pathlib import Path
+resources=Path(sys.argv[1]);history=resources/'WeatherHistory'
+index=json.loads((history/'index.json').read_text())
+assert len(index['points'])==100
+assert [y['year'] for y in index['years']]==list(range(2015,2026))
+for y in index['years']:
+    data=(history/y['file']).read_bytes()
+    assert len(data)==y['bytes'] and hashlib.sha256(data).hexdigest()==y['sha256']
+assert (resources/'ThermalMap/geometry.json').is_file()
+assert (resources/'ThermalMap/replay.json').is_file()
+print('PASS: built extension contains complete historical archive and map assets')
+PYARCHIVE
 # Sign nested code first, then its host. Never use --deep to sign nested code.
 codesign --force --sign - --timestamp=none --generate-entitlement-der \
   --entitlements Widgets/Widgets.entitlements "$EXT"

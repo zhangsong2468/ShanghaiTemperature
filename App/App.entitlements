@@ -6,5 +6,9 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<key>com.apple.security.temporary-exception.shared-preference.read-write</key>
+	<array>
+		<string>com.songa.ShanghaiTemperature.ThermalPreferences</string>
+	</array>
 </dict>
 </plist>
