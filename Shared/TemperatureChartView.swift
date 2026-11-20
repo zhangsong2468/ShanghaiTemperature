@@ -116,14 +116,14 @@ struct RollingTemperatureChartView: View {
     let snapshot: RollingTemperatureSnapshot
     let date: Date
     let cityName: String
-    let commuteRainMessage: String?
+    let commuteRainCondition: CommuteRainCondition
 
     init(snapshot: RollingTemperatureSnapshot, date: Date, cityName: String = "上海",
-         commuteRainMessage: String? = nil) {
+         commuteRainCondition: CommuteRainCondition = .unknown) {
         self.snapshot = snapshot
         self.date = date
         self.cityName = cityName
-        self.commuteRainMessage = commuteRainMessage
+        self.commuteRainCondition = commuteRainCondition
     }
 
     private var start: Date {
@@ -217,9 +217,16 @@ struct RollingTemperatureChartView: View {
             .font(.system(size: 9))
             HStack(spacing: 8) {
                 Text("过去15天 · 今起15天")
-                if let commuteRainMessage {
+                switch commuteRainCondition {
+                case .rain(let message):
                     Spacer(minLength: 0)
-                    Text(verbatim: commuteRainMessage).lineLimit(1)
+                    Text(verbatim: message).lineLimit(1)
+                case .dry:
+                    Spacer(minLength: 0)
+                    Image(systemName: "sun.max")
+                        .accessibilityLabel("明天通勤时段无雨")
+                case .unknown:
+                    EmptyView()
                 }
             }
             .font(.system(size: 9)).foregroundStyle(.secondary)

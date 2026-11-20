@@ -19,6 +19,8 @@ struct ContentView: View {
                     .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("上海温度").font(.title3).fontWeight(.medium)
+                    Text("v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"))
+                        .font(.caption).foregroundStyle(.secondary)
                     Text("上海 · 摄氏度 · 7 / 15 / 30 天")
                         .font(.caption).foregroundStyle(.secondary)
                 }

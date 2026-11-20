@@ -71,7 +71,7 @@ struct ShanghaiMonthWidget: Widget {
 struct RollingTemperatureEntry: TimelineEntry {
     let date: Date
     let snapshot: RollingTemperatureSnapshot
-    let commuteRainMessage: String?
+    let commuteRainCondition: CommuteRainCondition
 }
 
 struct RollingTemperatureProvider: TimelineProvider {
@@ -101,7 +101,7 @@ struct RollingTemperatureProvider: TimelineProvider {
         }
         return RollingTemperatureEntry(date: date,
             snapshot: RollingTemperatureSnapshot(days: days, status: .sample, fetchedAt: nil),
-            commuteRainMessage: nil)
+            commuteRainCondition: .unknown)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (RollingTemperatureEntry) -> Void) {
@@ -112,7 +112,7 @@ struct RollingTemperatureProvider: TimelineProvider {
             let (snapshot, rainUpdate) = await (temperature, rain)
             let now = Date()
             completion(RollingTemperatureEntry(date: now, snapshot: snapshot.projected(at: now),
-                commuteRainMessage: rainUpdate?.record?.message(at: now)))
+                commuteRainCondition: rainUpdate?.record?.condition(at: now) ?? .unknown))
         }
     }
 
@@ -137,7 +137,7 @@ struct RollingTemperatureProvider: TimelineProvider {
             }
             let entries = Array(Set(dates)).sorted().map {
                 RollingTemperatureEntry(date: $0, snapshot: snapshot.projected(at: $0),
-                    commuteRainMessage: rainUpdate?.record?.message(at: $0))
+                    commuteRainCondition: rainUpdate?.record?.condition(at: $0) ?? .unknown)
             }
             let temperatureRefresh = WeatherStore.nextRefresh(for: snapshot, after: now)
             let refresh = rainUpdate.map {
@@ -153,7 +153,7 @@ struct ShanghaiRollingMonthWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ShanghaiTemperature.Rolling30Days", provider: RollingTemperatureProvider()) { entry in
             RollingTemperatureChartView(snapshot: entry.snapshot, date: entry.date,
-                commuteRainMessage: entry.commuteRainMessage)
+                commuteRainCondition: entry.commuteRainCondition)
                 .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName(Text(verbatim: "上海 · 前后30天"))

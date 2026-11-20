@@ -1,5 +1,11 @@
 import Foundation
 
+enum CommuteRainCondition: Equatable, Sendable {
+    case unknown
+    case dry
+    case rain(String)
+}
+
 enum CommuteRainIntensity: Int, Codable, Sendable {
     case none, light, moderate, heavy
 
@@ -54,7 +60,14 @@ struct CommuteRainRecord: Codable, Sendable {
     }
 
     func message(at now: Date) -> String? {
-        guard hasCompleteCoverage(at: now) else { return nil }
+        if case .rain(let text) = condition(at: now) {
+            return text
+        }
+        return nil
+    }
+
+    func condition(at now: Date) -> CommuteRainCondition {
+        guard hasCompleteCoverage(at: now) else { return .unknown }
         let tomorrow = ShanghaiTime.nextMidnight(after: now)
         let byDate = Dictionary(hours.map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
         func intensity(endingAt hour: Int) -> CommuteRainIntensity? {
@@ -67,17 +80,20 @@ struct CommuteRainRecord: Codable, Sendable {
             // Weather codes describe an instant, not the preceding hour's rain
             // strength. Use both endpoints only to avoid ambiguous frozen/hail rain.
             let frozenOrHail: Set<Int> = [56, 57, 66, 67, 71, 73, 75, 77, 85, 86, 96, 99]
-            if amount > 0 && (snow > 0 || frozenOrHail.contains(code) || frozenOrHail.contains(previousCode)) {
+            if snow > 0 || frozenOrHail.contains(code) || frozenOrHail.contains(previousCode) {
                 return nil
             }
             return CommuteRainIntensity(millimetres: amount)
         }
         // API timestamps label the preceding hour: 09:00 + 10:00 cover 08–10.
         guard let morningFirst = intensity(endingAt: 9), let morningLast = intensity(endingAt: 10),
-              let eveningFirst = intensity(endingAt: 20), let eveningLast = intensity(endingAt: 21) else { return nil }
+              let eveningFirst = intensity(endingAt: 20), let eveningLast = intensity(endingAt: 21) else { return .unknown }
         let morning = morningFirst.rawValue > morningLast.rawValue ? morningFirst : morningLast
         let evening = eveningFirst.rawValue > eveningLast.rawValue ? eveningFirst : eveningLast
-        return Self.message(morning: morning, evening: evening)
+        if let text = Self.message(morning: morning, evening: evening) {
+            return .rain(text)
+        }
+        return .dry
     }
 
     static func message(morning: CommuteRainIntensity, evening: CommuteRainIntensity) -> String? {
