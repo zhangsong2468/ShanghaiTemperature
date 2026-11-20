@@ -71,6 +71,7 @@ struct ShanghaiMonthWidget: Widget {
 struct RollingTemperatureEntry: TimelineEntry {
     let date: Date
     let snapshot: RollingTemperatureSnapshot
+    let commuteRainMessage: String?
 }
 
 struct RollingTemperatureProvider: TimelineProvider {
@@ -81,6 +82,11 @@ struct RollingTemperatureProvider: TimelineProvider {
     private func loadSnapshot() async -> RollingTemperatureSnapshot {
         if isHangzhou { return await WeatherStore.shared.loadHangzhouRollingMonth() }
         return await WeatherStore.shared.loadRollingMonth()
+    }
+
+    private func loadCommuteRain() async -> CommuteRainUpdate? {
+        guard !isHangzhou else { return nil }
+        return await CommuteRainStore.shared.load()
     }
 
     func placeholder(in context: Context) -> RollingTemperatureEntry {
@@ -94,21 +100,27 @@ struct RollingTemperatureProvider: TimelineProvider {
                 maximum: SampleWeather.maximum[index % 15], minimum: SampleWeather.minimum[index % 15])
         }
         return RollingTemperatureEntry(date: date,
-            snapshot: RollingTemperatureSnapshot(days: days, status: .sample, fetchedAt: nil))
+            snapshot: RollingTemperatureSnapshot(days: days, status: .sample, fetchedAt: nil),
+            commuteRainMessage: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (RollingTemperatureEntry) -> Void) {
         if context.isPreview { completion(placeholder(in: context)); return }
         Task {
-            let snapshot = await loadSnapshot()
+            async let temperature = loadSnapshot()
+            async let rain = loadCommuteRain()
+            let (snapshot, rainUpdate) = await (temperature, rain)
             let now = Date()
-            completion(RollingTemperatureEntry(date: now, snapshot: snapshot.projected(at: now)))
+            completion(RollingTemperatureEntry(date: now, snapshot: snapshot.projected(at: now),
+                commuteRainMessage: rainUpdate?.record?.message(at: now)))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RollingTemperatureEntry>) -> Void) {
         Task {
-            let snapshot = await loadSnapshot()
+            async let temperature = loadSnapshot()
+            async let rain = loadCommuteRain()
+            let (snapshot, rainUpdate) = await (temperature, rain)
             let now = Date()
             var dates = [now]
             let nextHour = ShanghaiTime.calendar.dateInterval(of: .hour, for: now)!.end
@@ -119,11 +131,19 @@ struct RollingTemperatureProvider: TimelineProvider {
                 dates += [fetched.addingTimeInterval(ForecastRecord.refreshInterval),
                           fetched.addingTimeInterval(ForecastRecord.maximumCacheAge + 1)].filter { $0 > now }
             }
-            let entries = Array(Set(dates)).sorted().map {
-                RollingTemperatureEntry(date: $0, snapshot: snapshot.projected(at: $0))
+            if let fetched = rainUpdate?.record?.fetchedAt {
+                let expiry = fetched.addingTimeInterval(CommuteRainRecord.maximumAge)
+                if expiry > now { dates.append(expiry) }
             }
-            completion(Timeline(entries: entries,
-                policy: .after(WeatherStore.nextRefresh(for: snapshot, after: now))))
+            let entries = Array(Set(dates)).sorted().map {
+                RollingTemperatureEntry(date: $0, snapshot: snapshot.projected(at: $0),
+                    commuteRainMessage: rainUpdate?.record?.message(at: $0))
+            }
+            let temperatureRefresh = WeatherStore.nextRefresh(for: snapshot, after: now)
+            let refresh = rainUpdate.map {
+                min(temperatureRefresh, max(now.addingTimeInterval(60), $0.refreshAfter))
+            } ?? temperatureRefresh
+            completion(Timeline(entries: entries, policy: .after(refresh)))
         }
     }
 
@@ -132,7 +152,8 @@ struct RollingTemperatureProvider: TimelineProvider {
 struct ShanghaiRollingMonthWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ShanghaiTemperature.Rolling30Days", provider: RollingTemperatureProvider()) { entry in
-            RollingTemperatureChartView(snapshot: entry.snapshot, date: entry.date)
+            RollingTemperatureChartView(snapshot: entry.snapshot, date: entry.date,
+                commuteRainMessage: entry.commuteRainMessage)
                 .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName(Text(verbatim: "上海 · 前后30天"))

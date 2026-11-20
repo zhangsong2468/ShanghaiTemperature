@@ -21,6 +21,7 @@ def plist(path, value):
 
 sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift',
            'Shared/WeatherModel.swift', 'Shared/TemperatureChartView.swift', 'Shared/WeatherService.swift',
+           'Shared/CommuteRainForecast.swift',
            'Shared/HistoricalWeatherArchive.swift', 'Shared/ThermalComparison.swift',
            'Shared/ThermalSourceSettings.swift', 'Shared/NetworkApparentTemperature.swift',
            'Shared/DynamicThermalBands.swift', 'Shared/ThermalMapGeometry.swift', 'Shared/ThermalMapView.swift', 'Shared/SolarTermCalendar.swift', 'Shared/ThermalSurface.swift',
@@ -71,7 +72,7 @@ for extension in [False, True]:
             'GENERATE_INFOPLIST_FILE':'NO','CODE_SIGN_STYLE':'Automatic',
             'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','SDKROOT':'macosx',
             'SUPPORTED_PLATFORMS':'macosx', 'ENABLE_HARDENED_RUNTIME':'YES',
-            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.3.1',
+            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.3.2',
             'LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks']+(['@executable_path/../../../../Frameworks'] if extension else []),
             'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O',
             'SWIFT_COMPILATION_MODE':'singlefile' if config=='Debug' else 'wholemodule',
