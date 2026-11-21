@@ -25,6 +25,10 @@ struct AircraftMapDrawResult {
 
 enum AircraftMapLayer {
     static let fontSize: CGFloat = 8.5
+    // Fixed medium gray remains visible on a white map background.
+    static let aircraftColor = Color(
+        .sRGB, red: 0.42, green: 0.42, blue: 0.42, opacity: 1
+    )
     // Set false to restore collision avoidance.
     static let allowOverlap = true
 
@@ -190,7 +194,7 @@ enum AircraftMapLayer {
             for value in variants {
                 let text = context.resolve(Text(verbatim: value)
                     .font(.system(size: fontSize, weight: .medium))
-                    .foregroundColor(.primary))
+                    .foregroundColor(aircraftColor))
                 let measured = text.measure(in: CGSize(
                     width: CGFloat.greatestFiniteMagnitude,
                     height: CGFloat.greatestFiniteMagnitude))
@@ -198,27 +202,15 @@ enum AircraftMapLayer {
                 let w = ceil(measured.width), h = ceil(measured.height)
                 let gap: CGFloat = 4
                 let boxes = [
-                    CGRect(x: iconRect.maxX + gap, y: anchor.y - h / 2, width: w, height: h),
-                    CGRect(x: iconRect.minX - gap - w, y: anchor.y - h / 2, width: w, height: h),
-                    CGRect(x: anchor.x - w / 2, y: iconRect.minY - gap - h, width: w, height: h),
-                    CGRect(x: anchor.x - w / 2, y: iconRect.maxY + gap, width: w, height: h),
-                    CGRect(x: iconRect.maxX + gap, y: iconRect.minY - gap - h, width: w, height: h),
-                    CGRect(x: iconRect.minX - gap - w, y: iconRect.minY - gap - h, width: w, height: h),
-                    CGRect(x: iconRect.maxX + gap, y: iconRect.maxY + gap, width: w, height: h),
-                    CGRect(x: iconRect.minX - gap - w, y: iconRect.maxY + gap, width: w, height: h)
+                    CGRect(
+                        x: iconRect.maxX + gap, y: anchor.y - h / 2,
+                        width: w, height: h),
+                    CGRect(
+                        x: iconRect.minX - gap - w, y: anchor.y - h / 2,
+                        width: w, height: h)
                 ]
-                // Stable across launches: do not use Swift's randomised hash.
-                let seed = state.icao24.utf8.reduce(0) {
-                    ($0 * 31 + Int($1)) % 8
-                }
-                var order = (0..<boxes.count).map {
-                    (seed + $0) % boxes.count
-                }
-                if let previous = previousLabelPositions[state.icao24],
-                   boxes.indices.contains(previous) {
-                    order.removeAll { $0 == previous }
-                    order.insert(previous, at: 0)
-                }
+                // Keep the icon and text on one horizontal line.
+                let order = [0, 1]
                 guard let index = order.first(where: { available(boxes[$0]) }) else {
                     continue
                 }
@@ -250,7 +242,9 @@ enum AircraftMapLayer {
                 systemSymbolName: icon.symbol,
                 accessibilityDescription: nil
             ) else { continue }
-            let image = context.resolve(Image(nsImage: native))
+            var image = context.resolve(
+                Image(nsImage: native).renderingMode(.template))
+            image.shading = .color(aircraftColor)
             var layer = context
             layer.translateBy(x: icon.anchor.x, y: icon.anchor.y)
             layer.rotate(by: .degrees(icon.angle))
@@ -261,7 +255,7 @@ enum AircraftMapLayer {
         for label in layout.labels {
             let text = context.resolve(Text(verbatim: label.text)
                 .font(.system(size: fontSize, weight: .medium))
-                .foregroundColor(.primary))
+                .foregroundColor(aircraftColor))
             var layer = context
             layer.addFilter(.shadow(
                 color: Color(nsColor: .windowBackgroundColor).opacity(0.9),
