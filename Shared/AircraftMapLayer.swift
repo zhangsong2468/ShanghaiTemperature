@@ -37,7 +37,7 @@ enum AircraftMapLayer {
         preferredShanghaiIDs: Set<String> = [],
         now: Date,
         bounds: AircraftBounds,
-        project: (Double, Double) -> CGPoint
+        project: @escaping (Double, Double) -> CGPoint
     ) -> AircraftMapDrawResult {
         var occupied = reserved
         var visibleIDs = Set<String>()
@@ -278,7 +278,7 @@ enum AircraftMapLayer {
         preferredShanghaiIDs: Set<String> = [],
         now: Date,
         bounds: AircraftBounds,
-        project: (Double, Double) -> CGPoint
+        project: @escaping (Double, Double) -> CGPoint
     ) -> AircraftMapDrawResult {
         let result = layout(
             context: context, canvas: canvas,
