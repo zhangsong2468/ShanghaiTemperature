@@ -1,0 +1,41 @@
+name: Aircraft Compile
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate project
+        run: |
+          python3 scripts/generate_project.py
+          python3 scripts/validate_project.py
+
+      - name: Compile app and widget
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild \
+            -project ShanghaiTemperature.xcodeproj \
+            -scheme ShanghaiTemperature \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/AircraftCompile \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee build/aircraft-compile.log
+
+      - name: Upload compile log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aircraft-compile-log
+          path: build/aircraft-compile.log
+          if-no-files-found: ignore

@@ -181,10 +181,31 @@ private enum ThermalMapRaster {
 
 struct ThermalMapView: View {
     let display: ThermalMapDisplay
+    var preparedCanvasSize: CGSize? = nil
+    let aircraft: [TrackedAircraft]
+    let aircraftMetadata: [String: AircraftMetadata]
+    let aircraftBounds: AircraftBounds?
+    let previousAircraftLabelPositions: [String: Int]
+    let preferredAircraftIDs: Set<String>
+    let preferredShanghaiAircraftIDs: Set<String>
     private let geometry: ThermalMapGeometry?
     private let raster: ThermalMapRasterResult?
-    init(display: ThermalMapDisplay) {
+    init(display: ThermalMapDisplay,
+         preparedCanvasSize: CGSize? = nil,
+         aircraft: [TrackedAircraft] = [],
+         aircraftMetadata: [String: AircraftMetadata] = [:],
+         aircraftBounds: AircraftBounds? = nil,
+         previousAircraftLabelPositions: [String: Int] = [:],
+         preferredAircraftIDs: Set<String> = [],
+         preferredShanghaiAircraftIDs: Set<String> = []) {
         self.display=display
+        self.preparedCanvasSize=preparedCanvasSize
+        self.aircraft=aircraft
+        self.aircraftMetadata=aircraftMetadata
+        self.aircraftBounds=aircraftBounds
+        self.previousAircraftLabelPositions=previousAircraftLabelPositions
+        self.preferredAircraftIDs=preferredAircraftIDs
+        self.preferredShanghaiAircraftIDs=preferredShanghaiAircraftIDs
         let geometry=try? ThermalMapGeometry.bundled()
         self.geometry=geometry
         self.raster=display.snapshot.flatMap { snapshot in geometry.flatMap { ThermalMapRaster.image(snapshot:snapshot,geometry:$0) } }
@@ -204,7 +225,13 @@ struct ThermalMapView: View {
                 Text(SolarTermCalendar.status(at:display.date).label).foregroundStyle(.secondary)
             }.font(.system(size:12))
             if let geometry,let snapshot=display.snapshot,let raster {
-                Canvas { context,size in draw(context:&context,size:size,geometry:geometry,snapshot:snapshot,raster:raster) }
+                Canvas { context,size in
+                    _ = draw(context:&context,size:size,
+                        geometry:geometry,snapshot:snapshot,raster:raster)
+                }
+                    .frame(
+                        width: preparedCanvasSize?.width,
+                        height: preparedCanvasSize?.height)
                     .accessibilityLabel("江浙沪体感温度地图，\(snapshot.bands.count)条温度带，摄氏度。\(display.message)")
             } else {
                 VStack(spacing:8) {
@@ -223,8 +250,23 @@ struct ThermalMapView: View {
         }.padding(13)
     }
 
+    // Returns the same aircraft layout that is used for drawing.
+    // Preparation callers supply a disposable graphics context.
+    func prepareAircraftLayout(
+        context: inout GraphicsContext,
+        size: CGSize
+    ) -> AircraftMapDrawResult? {
+        guard size.width.isFinite, size.height.isFinite,
+              size.width > 4, size.height > 4,
+              let geometry, let snapshot=display.snapshot,
+              let raster else { return nil }
+        return draw(context:&context,size:size,geometry:geometry,
+            snapshot:snapshot,raster:raster,renderAircraft:false)
+    }
+
     private func draw(context: inout GraphicsContext,size: CGSize,geometry: ThermalMapGeometry,
-                      snapshot: ThermalBandSnapshot,raster: ThermalMapRasterResult) {
+                      snapshot: ThermalBandSnapshot,raster: ThermalMapRasterResult,
+                      renderAircraft: Bool = true) -> AircraftMapDrawResult? {
         let projection=MapProjection(bounds:geometry.bounds,
             rect:CGRect(x:size.width*0.18,y:9,width:size.width*0.64,height:max(1,size.height-18)))
         let outline=projection.path(geometry.regions)
@@ -233,7 +275,11 @@ struct ThermalMapView: View {
         clipped.draw(Image(decorative:raster.image,scale:1).interpolation(.high),in:projection.rect)
         context.stroke(outline,with:.color(.primary.opacity(0.55)),lineWidth:0.55)
         // Range labels choose nearby space on every side before place names.
-        var occupied=drawRanges(context:&context,size:size,projection:projection,snapshot:snapshot,raster:raster)
+        var aircraftLeaderObstacles = [CGRect]()
+        var occupied=drawRanges(
+            context:&context,size:size,projection:projection,
+            snapshot:snapshot,raster:raster,
+            aircraftLeaderObstacles:&aircraftLeaderObstacles)
         for label in geometry.labels {
             let anchor=projection.point(longitude:label.longitude,latitude:label.latitude)
             let text=context.resolve(Text(verbatim:label.name).font(.system(size:8.5,weight:.medium)).foregroundColor(.primary))
@@ -247,8 +293,45 @@ struct ThermalMapView: View {
             occupied.append(rect)
             var leader=Path();leader.move(to:anchor);leader.addLine(to:CGPoint(x:rect.midX,y:rect.midY))
             context.stroke(leader,with:.color(.primary.opacity(0.35)),lineWidth:0.4)
+            aircraftLeaderObstacles += Self.aircraftLineObstacles(
+                from:anchor,to:CGPoint(x:rect.midX,y:rect.midY))
             var halo=context;halo.addFilter(.shadow(color:Color(nsColor:.windowBackgroundColor).opacity(0.9),radius:1))
             halo.draw(text,at:CGPoint(x:rect.minX,y:rect.minY),anchor:.topLeading)
+        }
+        if !display.isReplay, let aircraftBounds {
+            let layout = AircraftMapLayer.layout(
+                context:context,
+                canvas:CGRect(origin:.zero,size:size),
+                aircraft:aircraft,
+                metadata:aircraftMetadata,
+                reserved:occupied + aircraftLeaderObstacles,
+                previousLabelPositions:previousAircraftLabelPositions,
+                preferredIDs:preferredAircraftIDs,
+                preferredShanghaiIDs:preferredShanghaiAircraftIDs,
+                now:display.date,
+                bounds:aircraftBounds,
+                project: { longitude,latitude in
+                    projection.point(longitude:longitude,latitude:latitude)
+                })
+            if renderAircraft {
+                AircraftMapLayer.render(layout,context:&context)
+            }
+            return layout
+        }
+        return nil
+    }
+
+    private static func aircraftLineObstacles(
+        from a: CGPoint, to b: CGPoint
+    ) -> [CGRect] {
+        let length=hypot(b.x-a.x,b.y-a.y)
+        let count=max(1,Int(ceil(length/2)))
+        return (0...count).map { index in
+            let fraction=CGFloat(index)/CGFloat(count)
+            return CGRect(
+                x:a.x+(b.x-a.x)*fraction-1,
+                y:a.y+(b.y-a.y)*fraction-1,
+                width:2,height:2)
         }
     }
 
@@ -261,7 +344,8 @@ struct ThermalMapView: View {
     }
 
     private func drawRanges(context: inout GraphicsContext,size: CGSize,projection: MapProjection,
-                            snapshot: ThermalBandSnapshot,raster: ThermalMapRasterResult) -> [CGRect] {
+                            snapshot: ThermalBandSnapshot,raster: ThermalMapRasterResult,
+                            aircraftLeaderObstacles: inout [CGRect]) -> [CGRect] {
         let canvas=CGRect(origin:.zero,size:size).insetBy(dx:2,dy:2)
         func project(_ unit: CGPoint) -> CGPoint {
             CGPoint(x:projection.rect.minX+unit.x*projection.rect.width,
@@ -351,6 +435,11 @@ struct ThermalMapView: View {
             var halo=context
             halo.addFilter(.shadow(color:Color(nsColor:.windowBackgroundColor).opacity(0.9),radius:1))
             halo.draw(text,at:CGPoint(x:chosen.rect.minX+2,y:chosen.rect.minY+1),anchor:.topLeading)
+        }
+        // Keep leader obstacles separate so existing city-label placement
+        // remains unchanged. Only aircraft must avoid these extra obstacles.
+        for (a,b) in leaders {
+            aircraftLeaderObstacles += Self.aircraftLineObstacles(from:a,to:b)
         }
         return occupied
     }

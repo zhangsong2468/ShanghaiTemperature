@@ -21,7 +21,7 @@ def plist(path, value):
 
 sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift',
            'Shared/WeatherModel.swift', 'Shared/TemperatureChartView.swift', 'Shared/WeatherService.swift',
-           'Shared/CommuteRainForecast.swift',
+           'Shared/CommuteRainForecast.swift', 'Shared/AircraftService.swift', 'Shared/AircraftMetadata.swift', 'Shared/AircraftTracking.swift', 'Shared/AircraftSelection.swift', 'Shared/AircraftMapLayer.swift',
            'Shared/HistoricalWeatherArchive.swift', 'Shared/ThermalComparison.swift',
            'Shared/ThermalSourceSettings.swift', 'Shared/NetworkApparentTemperature.swift',
            'Shared/DynamicThermalBands.swift', 'Shared/ThermalMapGeometry.swift', 'Shared/ThermalMapView.swift', 'Shared/SolarTermCalendar.swift', 'Shared/ThermalSurface.swift',

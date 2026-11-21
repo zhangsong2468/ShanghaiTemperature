@@ -24,7 +24,7 @@ a=source_paths(targets['ShanghaiTemperature'])
 w=source_paths(targets['ShanghaiTemperatureWidgets'])
 assert 'Widgets/ShanghaiTemperatureWidgets.swift' in w and not any(p.startswith('App/') for p in w)
 assert 'App/ShanghaiTemperatureApp.swift' in a and not any(p.startswith('Widgets/') for p in a)
-assert a&w=={'Shared/WeatherModel.swift','Shared/TemperatureChartView.swift','Shared/WeatherService.swift','Shared/CommuteRainForecast.swift','Shared/HistoricalWeatherArchive.swift','Shared/ThermalComparison.swift','Shared/ThermalSourceSettings.swift','Shared/NetworkApparentTemperature.swift','Shared/DynamicThermalBands.swift','Shared/ThermalMapGeometry.swift','Shared/ThermalMapView.swift','Shared/SolarTermCalendar.swift','Shared/ThermalSurface.swift','Shared/RegionalThermalStore.swift','Shared/RegionalCurrentWeather.swift','Shared/ThermalTimingAnalysis.swift'}
+assert a&w=={'Shared/WeatherModel.swift','Shared/TemperatureChartView.swift','Shared/WeatherService.swift','Shared/CommuteRainForecast.swift', 'Shared/AircraftService.swift', 'Shared/AircraftMetadata.swift', 'Shared/AircraftTracking.swift', 'Shared/AircraftSelection.swift', 'Shared/AircraftMapLayer.swift','Shared/HistoricalWeatherArchive.swift','Shared/ThermalComparison.swift','Shared/ThermalSourceSettings.swift','Shared/NetworkApparentTemperature.swift','Shared/DynamicThermalBands.swift','Shared/ThermalMapGeometry.swift','Shared/ThermalMapView.swift','Shared/SolarTermCalendar.swift','Shared/ThermalSurface.swift','Shared/RegionalThermalStore.swift','Shared/RegionalCurrentWeather.swift','Shared/ThermalTimingAnalysis.swift'}
 app=targets['ShanghaiTemperature']
 assert len(app['dependencies'])==1
 widget=targets['ShanghaiTemperatureWidgets']
