@@ -106,7 +106,10 @@ enum AircraftDecoder {
                 positionAt: Date(timeIntervalSince1970: position),
                 longitude: longitude, latitude: latitude, track: heading, category: category)
             guard state.isVisible(at: now, bounds: bounds) else { continue }
-            if let previous = byID[state.icao24], previous.positionAt >= state.positionAt { continue
+            if let previous = byID[state.icao24],
+               previous.positionAt >= state.positionAt {
+                continue
+            }
             byID[state.icao24] = state
         }
         return AircraftRecord(schema: 1, bounds: bounds, fetchedAt: now,
@@ -192,7 +195,9 @@ actor AircraftStore {
             request.timeoutInterval = 8
             let (data, response) = try await session.data(for: request)
             let receivedAt = Date()
-            guard let http = response as? HTTPURLResponse else { throw AircraftServiceError.invalidRe
+            guard let http = response as? HTTPURLResponse else {
+                throw AircraftServiceError.invalidResponse
+            }
             remainingCredits = http.value(forHTTPHeaderField: "X-Rate-Limit-Remaining").flatMap(Int.init)
             var delay = refreshInterval
             if let value = http.value(forHTTPHeaderField: "Retry-After") {
@@ -234,7 +239,10 @@ actor AircraftStore {
             return AircraftRecord(schema: 1, bounds: bounds, fetchedAt: saved.fetchedAt,
                 states: saved.visible(at: now))
         }
-        return AircraftUpdate(record: visible, refreshAfter: nextRequest, remainingCredits: remaining
+        return AircraftUpdate(
+            record: visible,
+            refreshAfter: nextRequest,
+            remainingCredits: remainingCredits)
     }
 
     private func persistThrottle() {
