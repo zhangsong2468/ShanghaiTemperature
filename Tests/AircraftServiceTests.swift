@@ -23,17 +23,74 @@ final class AircraftServiceTests: XCTestCase {
         XCTAssertEqual(state.callsign, "CES2631")
         XCTAssertEqual(state.category, 8)
         XCTAssertEqual(try XCTUnwrap(state.track), 343.98, accuracy: 0.001)
-        XCTAssertEqual(record.visible(at: now.addingTimeInterval(116)).count, 1)
-        XCTAssertTrue(record.visible(at: now.addingTimeInterval(117)).isEmpty)
+        XCTAssertEqual(record.visible(at: now.addingTimeInterval(296)).count, 1)
+        XCTAssertTrue(record.visible(at: now.addingTimeInterval(297)).isEmpty)
     }
 
     func testOldGroundedAndFuturePositionsAreHidden() throws {
-        for age in [120.0, 230.0, -1.0] {
+        for age in [300.0, 301.0, -1.0] {
             XCTAssertTrue(try AircraftDecoder.decode(payload(age: age),
                 bounds: bounds, now: now).states.isEmpty)
         }
         XCTAssertTrue(try AircraftDecoder.decode(payload(grounded: true),
             bounds: bounds, now: now).states.isEmpty)
+    }
+
+    private func state(id: Int, age: TimeInterval) -> AircraftState {
+        AircraftState(
+            icao24: String(format: "%06x", id),
+            callsign: nil,
+            positionAt: now.addingTimeInterval(-age),
+            longitude: 118.8173,
+            latitude: 32.149,
+            track: nil,
+            category: 0
+        )
+    }
+
+    func testDecoderKeepsOldPositionsWithinFiveMinutes() throws {
+        for age in [120.0, 230.0, 299.0] {
+            let record = try AircraftDecoder.decode(
+                payload(age: age), bounds: bounds, now: now)
+            XCTAssertEqual(record.states.count, 1)
+            XCTAssertEqual(record.visible(at: now).count, 1)
+            XCTAssertEqual(
+                try XCTUnwrap(record.states.first).positionAt,
+                now.addingTimeInterval(-age)
+            )
+        }
+    }
+
+    func testFiveOldAircraftRemainVisibleButSixAreHidden() {
+        let five = (1...5).map { state(id: $0, age: 230) }
+        XCTAssertEqual(
+            AircraftDisplayPolicy.choose(five, at: now, bounds: bounds).count, 5)
+        XCTAssertTrue(
+            AircraftDisplayPolicy.choose(
+                five + [state(id: 6, age: 230)],
+                at: now, bounds: bounds
+            ).isEmpty
+        )
+    }
+
+    func testFreshPositionsReplaceOldPositions() {
+        let old = (1...5).map { state(id: $0, age: 120) }
+        let fresh = state(id: 6, age: 119)
+        let selected = AircraftDisplayPolicy.choose(
+            old + [fresh], at: now, bounds: bounds)
+        XCTAssertEqual(selected.map { $0.icao24 }, [fresh.icao24])
+    }
+
+    func testFiveMinuteExpiryBoundary() {
+        let aircraft = state(id: 1, age: 299)
+        XCTAssertEqual(
+            AircraftDisplayPolicy.choose(
+                [aircraft], at: now, bounds: bounds).count, 1)
+        XCTAssertTrue(
+            AircraftDisplayPolicy.choose(
+                [aircraft], at: now.addingTimeInterval(1), bounds: bounds
+            ).isEmpty
+        )
     }
 
     func testMissingHeadingAndUnknownCategoryRemainUsable() throws {
