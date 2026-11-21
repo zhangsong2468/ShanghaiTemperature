@@ -25,6 +25,8 @@ struct AircraftMapDrawResult {
 
 enum AircraftMapLayer {
     static let fontSize: CGFloat = 8.5
+    // Set false to restore collision avoidance.
+    static let allowOverlap = true
 
     static func layout(
         context: GraphicsContext,
@@ -82,16 +84,17 @@ enum AircraftMapLayer {
                   safeCanvas.contains(geometry.rect) else { return nil }
             return item.state.icao24
         })
-        let displayTarget = min(10,
-            Int(ceil(Double(viewportIDs.count) * 0.2)))
+        let displayTarget = viewportIDs.count <= 5
+            ? viewportIDs.count
+            : min(10, Int(ceil(Double(viewportIDs.count) * 0.2)))
         var iconRects: [String: CGRect] = [:]
         let candidates = aircraft.filter { item in
             guard item.state.isVisible(at: now, bounds: bounds),
                   let geometry = iconGeometry(item),
                   safeCanvas.contains(geometry.rect),
-                  !reserved.contains(where: {
+                  (allowOverlap || !reserved.contains(where: {
                       $0.intersects(geometry.rect.insetBy(dx: -2, dy: -2))
-                  }) else { return false }
+                  })) else { return false }
             iconRects[item.state.icao24] = geometry.rect
             return true
         }
@@ -112,6 +115,7 @@ enum AircraftMapLayer {
                 )
             },
             canSelect: { candidate, selected in
+                if allowOverlap { return true }
                 guard let rect = iconRects[candidate.state.icao24] else {
                     return false
                 }
@@ -126,9 +130,9 @@ enum AircraftMapLayer {
 
         func available(_ rect: CGRect) -> Bool {
             safeCanvas.contains(rect)
-                && !occupied.contains {
+                && (allowOverlap || !occupied.contains {
                     $0.intersects(rect.insetBy(dx: -2, dy: -2))
-                }
+                })
         }
 
         for item in ordered {

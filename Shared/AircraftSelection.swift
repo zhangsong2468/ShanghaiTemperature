@@ -31,7 +31,10 @@ enum AircraftSelector {
         let south = mercator(bounds.south)
         let north = mercator(bounds.north)
         var unique: [String: TrackedAircraft] = [:]
-        for item in aircraft where item.state.isVisible(at: now, bounds: bounds) {
+        let allowedIDs = Set(AircraftDisplayPolicy.choose(
+            aircraft.map { $0.state }, at: now, bounds: bounds
+        ).map { $0.icao24 })
+        for item in aircraft where allowedIDs.contains(item.state.icao24) {
             let id = item.state.icao24
             if let old = unique[id], old.state.positionAt >= item.state.positionAt {
                 continue
@@ -61,7 +64,9 @@ enum AircraftSelector {
                 x: x, y: y, cell: row * 10 + column,
                 retained: previousIDs.contains(state.icao24))
         }
-        let estimated = Int(ceil(Double(candidates.count) * 0.2))
+        let estimated = candidates.count <= 5
+            ? candidates.count
+            : Int(ceil(Double(candidates.count) * 0.2))
         let target = min(candidates.count, min(10, max(0, targetCount ?? estimated)))
         guard target > 0 else {
             return AircraftSelectionResult(aircraft: [], shanghaiIDs: [])
@@ -152,7 +157,10 @@ struct AircraftOverlaySnapshot: Sendable {
     let refreshAfter: Date
 
     func visible(at date: Date) -> [TrackedAircraft] {
-        aircraft.filter { $0.state.isVisible(at: date, bounds: bounds) }
+        let ids = Set(AircraftDisplayPolicy.choose(
+            aircraft.map { $0.state }, at: date, bounds: bounds
+        ).map { $0.icao24 })
+        return aircraft.filter { ids.contains($0.state.icao24) }
     }
 }
 

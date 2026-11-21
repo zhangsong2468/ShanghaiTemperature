@@ -29,9 +29,30 @@ struct AircraftState: Codable, Sendable {
 
     func isVisible(at now: Date, bounds: AircraftBounds) -> Bool {
         let age = now.timeIntervalSince(positionAt)
-        return age >= 0 && age < 120
+        return age >= 0 && age < 300
             && longitude.isFinite && latitude.isFinite
             && bounds.contains(longitude: longitude, latitude: latitude)
+    }
+}
+
+enum AircraftDisplayPolicy {
+    static func choose(
+        _ states: [AircraftState],
+        at now: Date,
+        bounds: AircraftBounds
+    ) -> [AircraftState] {
+        var unique: [String: AircraftState] = [:]
+        for state in states where state.isVisible(at: now, bounds: bounds) {
+            if let previous = unique[state.icao24],
+               previous.positionAt >= state.positionAt { continue }
+            unique[state.icao24] = state
+        }
+        let available = unique.values.sorted { $0.icao24 < $1.icao24 }
+        let fresh = available.filter {
+            now.timeIntervalSince($0.positionAt) < 120
+        }
+        if !fresh.isEmpty { return fresh }
+        return available.count <= 5 ? available : []
     }
 }
 
@@ -43,7 +64,7 @@ struct AircraftRecord: Codable, Sendable {
 
     func visible(at now: Date) -> [AircraftState] {
         guard schema == 1, bounds.isValid, now >= fetchedAt else { return [] }
-        return states.filter { $0.isVisible(at: now, bounds: bounds) }
+        return AircraftDisplayPolicy.choose(states, at: now, bounds: bounds)
     }
 }
 

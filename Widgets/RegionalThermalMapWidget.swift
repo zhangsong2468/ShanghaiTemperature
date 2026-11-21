@@ -61,8 +61,11 @@ struct RegionalThermalMapProvider: TimelineProvider {
                 dates += [record.fetchedAt.addingTimeInterval(ForecastRecord.maximumCacheAge+1)]
             }
             if let overlay {
-                dates += overlay.aircraft.map {
-                    $0.state.positionAt.addingTimeInterval(120)
+                // Re-evaluate when fresh positions become stale and when
+                // the five-minute fallback expires. Preserve observation times.
+                dates += overlay.aircraft.flatMap { item in
+                    [item.state.positionAt.addingTimeInterval(120),
+                     item.state.positionAt.addingTimeInterval(300)]
                 }.filter { $0 > now }
             }
             let entries=Array(Set(dates.filter {$0>=now})).sorted().map { date in
