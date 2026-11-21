@@ -50,7 +50,7 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          version=0.3.4
+          version=0.3.5
           if [[ "$REF_TYPE" == tag ]]; then version="${REF_NAME#v}"; fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -104,6 +104,8 @@ jobs:
           显示较往年同期偏冷/偏暖；连续多日比较不稳定时，不显示提前/推迟提示。这不是正式入季判定。数据来源Open-Meteo（CC BY 4.0），地图来源Natural Earth（public domain）。
 
           这是个人预览版：应用与WidgetKit扩展均为ad-hoc签名，未经Apple公证。自动编译与数据测试通过不代表桌面组件已完成实机验证；首次运行可能被macOS提示限制。
+
+          新增地图飞机图层：五架以内全部展示；优先显示两分钟内的位置，没有新位置且候选不超过五架时可显示五分钟内的位置。允许图标和标签重叠，显示可查询到的航司及机型。飞机接口约五分钟请求一次，实际刷新由macOS调度，数据覆盖取决于OpenSky。
 
           下载DMG后将应用拖入“应用程序”，打开一次，再右键桌面→编辑小组件→搜索“上海温度”。附SHA256SUMS.txt校验文件。
           EOF
