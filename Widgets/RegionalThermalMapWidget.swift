@@ -8,6 +8,10 @@ struct RegionalThermalMapEntry: TimelineEntry {
     var aircraftCanvasSize: CGSize? = nil
 }
 
+private final class AircraftPreparedLayoutCapture {
+    var layout: AircraftMapDrawResult?
+}
+
 struct RegionalThermalMapProvider: TimelineProvider {
     private func replay() -> ThermalMapDisplay? {
         guard let folder=Bundle.main.url(forResource:"ThermalMap",withExtension:nil),
@@ -92,13 +96,6 @@ struct RegionalThermalMapProvider: TimelineProvider {
         guard var overlay, !display.isReplay,
               canvas.width.isFinite,canvas.height.isFinite,
               canvas.width > 4,canvas.height > 4 else { return overlay }
-        guard let bitmap = CGContext(
-            data:nil,width:1,height:1,bitsPerComponent:8,
-            bytesPerRow:4,space:CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return overlay }
-        var graphics = GraphicsContext(
-            cgContext:bitmap,environment:EnvironmentValues())
         let view = ThermalMapView(
             display:display,
             aircraft:overlay.visible(at:preparedAt),
@@ -107,9 +104,22 @@ struct RegionalThermalMapProvider: TimelineProvider {
             previousAircraftLabelPositions:overlay.labelPositions,
             preferredAircraftIDs:overlay.selectedIDs,
             preferredShanghaiAircraftIDs:overlay.shanghaiIDs)
-        guard let layout = view.prepareAircraftLayout(
-            context:&graphics,size:canvas
-        ) else { return overlay }
+
+        // SwiftUI supplies GraphicsContext through Canvas.
+        // Render synchronously offscreen; persistence occurs only afterward.
+        let capture = AircraftPreparedLayoutCapture()
+        let content = Canvas { context, size in
+            var graphics = context
+            capture.layout = view.prepareAircraftLayout(
+                context:&graphics,size:size)
+        }
+        .frame(width:canvas.width,height:canvas.height)
+        let renderer = ImageRenderer(content:content)
+        renderer.proposedSize = ProposedViewSize(
+            width:canvas.width,height:canvas.height)
+        renderer.scale = 1
+        guard renderer.cgImage != nil,
+              let layout = capture.layout else { return overlay }
         overlay = AircraftOverlaySnapshot(
             labelPositions:layout.labelPositions,
             selectedIDs:layout.visibleIDs,
