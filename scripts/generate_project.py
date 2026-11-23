@@ -72,7 +72,7 @@ for extension in [False, True]:
             'GENERATE_INFOPLIST_FILE':'NO','CODE_SIGN_STYLE':'Automatic',
             'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','SDKROOT':'macosx',
             'SUPPORTED_PLATFORMS':'macosx', 'ENABLE_HARDENED_RUNTIME':'YES',
-            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.3.8',
+            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.3.9',
             'LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks']+(['@executable_path/../../../../Frameworks'] if extension else []),
             'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O',
             'SWIFT_COMPILATION_MODE':'singlefile' if config=='Debug' else 'wholemodule',
@@ -115,7 +115,7 @@ base={'CFBundleDevelopmentRegion':'zh-Hans','CFBundleExecutable':'$(EXECUTABLE_N
 plist('App/Info.plist',base|{'CFBundlePackageType':'APPL','NSPrincipalClass':'NSApplication','LSApplicationCategoryType':'public.app-category.weather'})
 plist('Widgets/Info.plist',base|{'CFBundlePackageType':'XPC!','NSExtension':{'NSExtensionPointIdentifier':'com.apple.widgetkit-extension'}})
 for path in ['App/App.entitlements','Widgets/Widgets.entitlements']:
-    access = 'read-only' if path.startswith('Widgets/') else 'read-write'
+    access = 'read-write'
     plist(path,{'com.apple.security.app-sandbox':True,'com.apple.security.network.client':True,
         'com.apple.security.temporary-exception.shared-preference.'+access:
             ['com.songa.ShanghaiTemperature.ThermalPreferences']})

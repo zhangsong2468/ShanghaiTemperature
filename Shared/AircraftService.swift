@@ -153,6 +153,15 @@ actor AircraftStore {
     private var record: AircraftRecord?
     private var nextRequest: Date = .distantPast
     private var remainingCredits: Int?
+    private var backoffLevel = 0
+
+    private var currentInterval: TimeInterval {
+        max(refreshInterval, AircraftRequestStatus.interval(level: backoffLevel))
+    }
+
+    private var backoffFile: URL {
+        directory.appendingPathComponent("backoff-level.json")
+    }
     private var inFlight: Task<AircraftUpdate, Never>?
     private var inFlightBounds: AircraftBounds?
 
@@ -204,12 +213,20 @@ actor AircraftStore {
            saved.schema == 1, saved.bounds.isValid {
             record = saved
         }
+        if let data = try? Data(contentsOf: backoffFile),
+           let saved = try? JSONDecoder().decode(Int.self, from: data),
+           saved >= 0 {
+            backoffLevel = max(backoffLevel, saved)
+        }
         if let data = try? Data(contentsOf: throttleFile),
            let saved = try? JSONDecoder().decode(Date.self, from: data) {
             nextRequest = max(nextRequest, saved)
         }
-        if nextRequest > now { return update(bounds: bounds, now: now) }
-        nextRequest = now.addingTimeInterval(refreshInterval)
+        if nextRequest > now {
+            persistThrottle()
+            return update(bounds: bounds, now: now)
+        }
+        nextRequest = now.addingTimeInterval(currentInterval)
         persistThrottle()
         do {
             var request = URLRequest(url: try AircraftDecoder.url(bounds: bounds))
@@ -220,7 +237,12 @@ actor AircraftStore {
                 throw AircraftServiceError.invalidResponse
             }
             remainingCredits = http.value(forHTTPHeaderField: "X-Rate-Limit-Remaining").flatMap(Int.init)
-            var delay = refreshInterval
+            if http.statusCode == 429 {
+                if backoffLevel < Int.max - 1 {
+                    backoffLevel += 1
+                }
+            }
+            var delay = currentInterval
             if let value = http.value(forHTTPHeaderField: "Retry-After") {
                 if let seconds = Double(value), seconds.isFinite, seconds >= 0 {
                     delay = max(delay, seconds)
@@ -238,7 +260,9 @@ actor AircraftStore {
                let seconds = Double(value), seconds.isFinite, seconds >= 0 {
                 delay = max(delay, seconds)
             }
-            if http.statusCode == 429 || remainingCredits == 0 { delay = max(delay, 3600) }
+            if http.statusCode != 429 && remainingCredits == 0 {
+                delay = max(delay, 3600)
+            }
             if http.statusCode == 401 || http.statusCode == 403 { delay = max(delay, 3600) }
             nextRequest = receivedAt.addingTimeInterval(delay)
             persistThrottle()
@@ -269,5 +293,8 @@ actor AircraftStore {
     private func persistThrottle() {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? JSONEncoder().encode(nextRequest).write(to: throttleFile, options: .atomic)
+        try? JSONEncoder().encode(backoffLevel).write(to: backoffFile, options: .atomic)
+        AircraftRequestStatus.publish(
+            interval: currentInterval, nextRequest: nextRequest)
     }
 }

@@ -68,8 +68,8 @@ for entry in index['years']:
     assert (history/entry['file']).stat().st_size==entry['bytes']==entry['hours']*100*6
 print('PASS: complete 2015–2025 historical archive is embedded once in the extension.')
 
-# Only the dedicated, non-sensitive map setting is shared; extension is read-only.
-for path, access in [('App/App.entitlements','read-write'),('Widgets/Widgets.entitlements','read-only')]:
+# Dedicated preferences share the map setting and aircraft request status.
+for path, access in [('App/App.entitlements','read-write'),('Widgets/Widgets.entitlements','read-write')]:
     entitlements=plistlib.loads((root/path).read_bytes())
     assert entitlements['com.apple.security.temporary-exception.shared-preference.'+access]==['com.songa.ShanghaiTemperature.ThermalPreferences']
 print('PASS: app/extension share only the dedicated thermal-preference domain.')

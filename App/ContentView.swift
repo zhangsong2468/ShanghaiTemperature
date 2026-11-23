@@ -35,6 +35,23 @@ struct ContentView: View {
                 Text("30天数据源：\(extended?.availability ?? "正在获取…")")
             }
             .font(.caption).foregroundStyle(.secondary)
+            TimelineView(.periodic(from: .now, by: 5)) { _ in
+                VStack(alignment: .leading, spacing: 5) {
+                    if let status = AircraftRequestStatus.current {
+                        Text("飞机查询间隔：" + status.intervalText)
+                        Text("下次允许查询：" + status.nextRequestText)
+                        if status.nextRequest <= Date() {
+                            Text("已到允许查询时间，等待系统调度。")
+                        }
+                    } else {
+                        Text("飞机查询间隔：5 min（300 s）")
+                        Text("下次允许查询：等待地图组件首次请求")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
             Toggle("本地计算地图体感", isOn: Binding(
                 get: { useLocalThermal },
                 set: { enabled in
