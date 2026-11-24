@@ -35,6 +35,7 @@ enum AircraftMapLayer {
     static func layout(
         context: GraphicsContext,
         frozen: Bool = false,
+        suppressOverlappingLabels: Bool = false,
         canvas: CGRect,
         aircraft: [TrackedAircraft],
         metadata: [String: AircraftMetadata],
@@ -51,6 +52,7 @@ enum AircraftMapLayer {
         var positions: [String: Int] = [:]
         var icons: [AircraftMapDrawResult.Icon] = []
         var labels: [AircraftMapDrawResult.Label] = []
+        var acceptedLabelRects: [CGRect] = []
         var drawnIcons: [(AircraftState, CGRect)] = []
         let safeCanvas = canvas.insetBy(dx: 2, dy: 2)
         // Measure once; use exactly the same rectangle for selection and drawing.
@@ -220,6 +222,23 @@ enum AircraftMapLayer {
                     continue
                 }
                 let rect = boxes[index]
+                if suppressOverlappingLabels {
+                    let area = rect.width * rect.height
+                    guard area.isFinite, area > 0 else { break }
+                    let obscured = acceptedLabelRects.contains { previous in
+                        let intersection = rect.intersection(previous)
+                        guard !intersection.isNull, !intersection.isEmpty else {
+                            return false
+                        }
+                        let smallerArea = min(
+                            area, previous.width * previous.height)
+                        return intersection.width * intersection.height
+                            > smallerArea * 0.60
+                    }
+                    // Suppress the entire later label; keep its icon and position.
+                    if obscured { break }
+                    acceptedLabelRects.append(rect)
+                }
                 labels.append(AircraftMapDrawResult.Label(
                     text: value, origin: rect.origin))
                 occupied.append(rect)
@@ -228,7 +247,7 @@ enum AircraftMapLayer {
                 break
             }
             if !placed {
-                // Keep the icon when there is no collision-free label position.
+                // Keep the icon when its label is hidden or no position fits.
                 continue
             }
         }

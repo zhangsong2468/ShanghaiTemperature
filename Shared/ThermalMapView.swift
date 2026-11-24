@@ -313,6 +313,7 @@ struct ThermalMapView: View {
             let layout = AircraftMapLayer.layout(
                 context:context,
                 frozen:aircraftFrozenAt != nil,
+                suppressOverlappingLabels:!appPresentation,
                 canvas:CGRect(origin:.zero,size:size),
                 aircraft:aircraft,
                 metadata:aircraftMetadata,
