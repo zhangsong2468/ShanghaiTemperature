@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-0.4.2}"
+VERSION="${VERSION:-0.4.3}"
 BUILD_NUMBER="${BUILD_NUMBER:-2}"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   echo 'Invalid version or build number.' >&2; exit 2
