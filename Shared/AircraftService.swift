@@ -30,7 +30,7 @@ struct AircraftState: Codable, Sendable {
 
     func isVisible(at now: Date, bounds: AircraftBounds) -> Bool {
         let age = now.timeIntervalSince(positionAt)
-        return age >= 0 && age < 300
+        return age >= 0 && age < 600
             && longitude.isFinite && latitude.isFinite
             && bounds.contains(longitude: longitude, latitude: latitude)
     }
@@ -48,12 +48,9 @@ enum AircraftDisplayPolicy {
                previous.positionAt >= state.positionAt { continue }
             unique[state.icao24] = state
         }
-        let available = unique.values.sorted { $0.icao24 < $1.icao24 }
-        let fresh = available.filter {
-            now.timeIntervalSince($0.positionAt) < 120
-        }
-        if !fresh.isEmpty { return fresh }
-        return available.count <= 5 ? available : []
+        // All positions younger than ten minutes are eligible.
+        // AircraftSelector applies the final ten-aircraft limit.
+        return unique.values.sorted { $0.icao24 < $1.icao24 }
     }
 }
 
@@ -278,6 +275,7 @@ actor AircraftStore {
             record = saved
             logger.notice("Decoded id=\(requestID, privacy: .public) aircraft=\(saved.states.count)")
             try? JSONEncoder().encode(saved).write(to: file, options: .atomic)
+            await AircraftHistoryStore.shared.append(saved)
         } catch {
             logger.error("Request failed id=\(requestID, privacy: .public) error=\(String(describing: error), privacy: .public)")
         }

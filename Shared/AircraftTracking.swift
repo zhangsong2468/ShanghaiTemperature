@@ -46,7 +46,7 @@ enum AircraftKind: Int, Codable, Sendable {
     }
 }
 
-struct TrackedAircraft: Sendable {
+struct TrackedAircraft: Codable, Sendable {
     let state: AircraftState
     let kind: AircraftKind
     let firstSeen: Date

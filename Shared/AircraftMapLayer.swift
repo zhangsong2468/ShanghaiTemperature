@@ -81,17 +81,15 @@ enum AircraftMapLayer {
                 width: rotatedWidth, height: rotatedHeight))
         }
 
-        // Count unique, fresh targets inside the actual drawing viewport.
-        // Map-label collisions affect placement, not the 20-percent budget.
+        // Count eligible targets inside the actual drawing viewport.
+        // Labels never move an aircraft away from its projected coordinate.
         let viewportIDs = Set(aircraft.compactMap { item -> String? in
             guard item.state.isVisible(at: now, bounds: bounds),
                   let geometry = iconGeometry(item),
                   safeCanvas.contains(geometry.rect) else { return nil }
             return item.state.icao24
         })
-        let displayTarget = viewportIDs.count <= 5
-            ? viewportIDs.count
-            : min(10, Int(ceil(Double(viewportIDs.count) * 0.2)))
+        let displayTarget = min(10, viewportIDs.count)
         var iconRects: [String: CGRect] = [:]
         let candidates = aircraft.filter { item in
             guard item.state.isVisible(at: now, bounds: bounds),
@@ -242,7 +240,8 @@ enum AircraftMapLayer {
 
     static func render(
         _ layout: AircraftMapDrawResult,
-        context: inout GraphicsContext
+        context: inout GraphicsContext,
+        color: Color = aircraftColor
     ) {
         for icon in layout.icons {
             guard let native = NSImage(
@@ -251,7 +250,7 @@ enum AircraftMapLayer {
             ) else { continue }
             var image = context.resolve(
                 Image(nsImage: native).renderingMode(.template))
-            image.shading = .color(aircraftColor)
+            image.shading = .color(color)
             var layer = context
             layer.translateBy(x: icon.anchor.x, y: icon.anchor.y)
             layer.rotate(by: .degrees(icon.angle))
@@ -262,7 +261,7 @@ enum AircraftMapLayer {
         for label in layout.labels {
             let text = context.resolve(Text(verbatim: label.text)
                 .font(.system(size: fontSize, weight: .medium))
-                .foregroundColor(aircraftColor))
+                .foregroundColor(color))
             var layer = context
             layer.addFilter(.shadow(
                 color: Color(nsColor: .windowBackgroundColor).opacity(0.9),

@@ -181,6 +181,7 @@ private enum ThermalMapRaster {
 
 struct ThermalMapView: View {
     let display: ThermalMapDisplay
+    let appPresentation: Bool
     var preparedCanvasSize: CGSize? = nil
     let aircraft: [TrackedAircraft]
     let aircraftFrozenAt: Date?
@@ -192,6 +193,7 @@ struct ThermalMapView: View {
     private let geometry: ThermalMapGeometry?
     private let raster: ThermalMapRasterResult?
     init(display: ThermalMapDisplay,
+         appPresentation: Bool = false,
          preparedCanvasSize: CGSize? = nil,
          aircraft: [TrackedAircraft] = [],
          aircraftFrozenAt: Date? = nil,
@@ -201,6 +203,7 @@ struct ThermalMapView: View {
          preferredAircraftIDs: Set<String> = [],
          preferredShanghaiAircraftIDs: Set<String> = []) {
         self.display=display
+        self.appPresentation=appPresentation
         self.preparedCanvasSize=preparedCanvasSize
         self.aircraft=aircraft
         self.aircraftFrozenAt=aircraftFrozenAt
@@ -222,11 +225,14 @@ struct ThermalMapView: View {
 
     var body: some View {
         VStack(alignment:.leading,spacing:5) {
-            HStack {
-                Text("江浙沪 · 体感温度").fontWeight(.medium)
-                Spacer(minLength:2)
-                Text(SolarTermCalendar.status(at:display.date).label).foregroundStyle(.secondary)
-            }.font(.system(size:12))
+            if !appPresentation {
+                HStack {
+                    Text("江浙沪 · 体感温度").fontWeight(.medium)
+                    Spacer(minLength:2)
+                    Text(SolarTermCalendar.status(at:display.date).label)
+                        .foregroundStyle(.secondary)
+                }.font(.system(size:12))
+            }
             if let geometry,let snapshot=display.snapshot,let raster {
                 Canvas { context,size in
                     _ = draw(context:&context,size:size,
@@ -242,13 +248,15 @@ struct ThermalMapView: View {
                     Text(mapFailureMessage).font(.system(size:11)).multilineTextAlignment(.center)
                 }.foregroundStyle(.secondary).frame(maxWidth:.infinity,maxHeight:.infinity)
             }
-            HStack {
-                Text(display.isReplay ? "历史回放 · 非实时" : display.message)
-                Spacer(minLength:2)
-                Text(ShanghaiTime.timestamp(display.snapshot?.date ?? display.date))
-            }.font(.system(size:8)).foregroundStyle(.secondary)
-            if let seasonal=display.seasonalMessage {
-                Text(seasonal).font(.system(size:9)).foregroundStyle(.secondary)
+            if !appPresentation {
+                HStack {
+                    Text(display.isReplay ? "历史回放 · 非实时" : display.message)
+                    Spacer(minLength:2)
+                    Text(ShanghaiTime.timestamp(display.snapshot?.date ?? display.date))
+                }.font(.system(size:8)).foregroundStyle(.secondary)
+                if let seasonal=display.seasonalMessage {
+                    Text(seasonal).font(.system(size:9)).foregroundStyle(.secondary)
+                }
             }
         }.padding(13)
     }
@@ -318,7 +326,9 @@ struct ThermalMapView: View {
                     projection.point(longitude:longitude,latitude:latitude)
                 })
             if renderAircraft {
-                AircraftMapLayer.render(layout,context:&context)
+                AircraftMapLayer.render(
+                    layout, context:&context,
+                    color:appPresentation ? .white : AircraftMapLayer.aircraftColor)
             }
             return layout
         }

@@ -64,10 +64,8 @@ enum AircraftSelector {
                 x: x, y: y, cell: row * 10 + column,
                 retained: previousIDs.contains(state.icao24))
         }
-        let estimated = candidates.count <= 5
-            ? candidates.count
-            : Int(ceil(Double(candidates.count) * 0.2))
-        let target = min(candidates.count, min(10, max(0, targetCount ?? estimated)))
+        let target = min(
+            candidates.count, min(10, max(0, targetCount ?? 10)))
         guard target > 0 else {
             return AircraftSelectionResult(aircraft: [], shanghaiIDs: [])
         }
@@ -358,11 +356,22 @@ actor AircraftOverlayStore {
         if latestPause.paused || latestPause.generation != started.generation {
             return frozen(bounds: bounds)
         }
-        return AircraftOverlaySnapshot(
+        let result = AircraftOverlaySnapshot(
             labelPositions: previous?.labelPositions ?? [:],
             selectedIDs: saved.ids, shanghaiIDs: saved.shanghaiIDs,
             aircraft: visible + backup, metadata: metadata, bounds: bounds,
             refreshAfter: update.refreshAfter)
+        if let record = update.record {
+            await AircraftHistoryStore.shared.rememberPresentation(
+                result, record: record)
+        }
+        // History persistence is an actor hop; recheck pause before returning.
+        let completedPause = AircraftPauseSettings.current
+        if completedPause.paused
+            || completedPause.generation != started.generation {
+            return frozen(bounds: bounds)
+        }
+        return result
     }
 
     // Call only during current timeline preparation, never from Canvas

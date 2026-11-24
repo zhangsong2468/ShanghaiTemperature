@@ -23,12 +23,13 @@ final class AircraftServiceTests: XCTestCase {
         XCTAssertEqual(state.callsign, "CES2631")
         XCTAssertEqual(state.category, 8)
         XCTAssertEqual(try XCTUnwrap(state.track), 343.98, accuracy: 0.001)
-        XCTAssertEqual(record.visible(at: now.addingTimeInterval(296)).count, 1)
-        XCTAssertTrue(record.visible(at: now.addingTimeInterval(297)).isEmpty)
+        // The fixture position is already three seconds old.
+        XCTAssertEqual(record.visible(at: now.addingTimeInterval(596)).count, 1)
+        XCTAssertTrue(record.visible(at: now.addingTimeInterval(597)).isEmpty)
     }
 
     func testOldGroundedAndFuturePositionsAreHidden() throws {
-        for age in [300.0, 301.0, -1.0] {
+        for age in [600.0, 601.0, -1.0] {
             XCTAssertTrue(try AircraftDecoder.decode(payload(age: age),
                 bounds: bounds, now: now).states.isEmpty)
         }
@@ -48,8 +49,8 @@ final class AircraftServiceTests: XCTestCase {
         )
     }
 
-    func testDecoderKeepsOldPositionsWithinFiveMinutes() throws {
-        for age in [120.0, 230.0, 299.0] {
+    func testDecoderKeepsPositionsWithinTenMinutes() throws {
+        for age in [119.0, 120.0, 299.0, 300.0, 599.0] {
             let record = try AircraftDecoder.decode(
                 payload(age: age), bounds: bounds, now: now)
             XCTAssertEqual(record.states.count, 1)
@@ -61,28 +62,55 @@ final class AircraftServiceTests: XCTestCase {
         }
     }
 
-    func testFiveOldAircraftRemainVisibleButSixAreHidden() {
-        let five = (1...5).map { state(id: $0, age: 230) }
-        XCTAssertEqual(
-            AircraftDisplayPolicy.choose(five, at: now, bounds: bounds).count, 5)
-        XCTAssertTrue(
-            AircraftDisplayPolicy.choose(
-                five + [state(id: 6, age: 230)],
-                at: now, bounds: bounds
-            ).isEmpty
-        )
+    func testCandidateEligibilityHasNoCountThreshold() {
+        for count in [5, 6, 10, 11, 30] {
+            let aircraft = (1...count).map { state(id: $0, age: 599) }
+            XCTAssertEqual(
+                AircraftDisplayPolicy.choose(
+                    aircraft, at: now, bounds: bounds).count,
+                count
+            )
+        }
     }
 
-    func testFreshPositionsReplaceOldPositions() {
-        let old = (1...5).map { state(id: $0, age: 120) }
+    func testSelectorShowsUpToTenWithoutPercentageSampling() {
+        for count in [1, 5, 6, 10, 11, 30] {
+            let candidates = (1...count).map {
+                TrackedAircraft(
+                    state: state(id: $0, age: 300),
+                    kind: .other,
+                    firstSeen: now)
+            }
+            let selected = AircraftSelector.select(
+                candidates, bounds: bounds, now: now)
+            XCTAssertEqual(selected.aircraft.count, min(count, 10))
+            XCTAssertEqual(
+                Set(selected.aircraft.map { $0.state.icao24 }).count,
+                selected.aircraft.count)
+        }
+    }
+
+    func testFreshAndOlderPositionsRemainEligibleTogether() {
+        let old = (1...5).map { state(id: $0, age: 599) }
         let fresh = state(id: 6, age: 119)
         let selected = AircraftDisplayPolicy.choose(
             old + [fresh], at: now, bounds: bounds)
-        XCTAssertEqual(selected.map { $0.icao24 }, [fresh.icao24])
+        XCTAssertEqual(
+            Set(selected.map { $0.icao24 }),
+            Set((old + [fresh]).map { $0.icao24 }))
     }
 
-    func testFiveMinuteExpiryBoundary() {
-        let aircraft = state(id: 1, age: 299)
+    func testDuplicateAircraftUsesNewestObservation() {
+        let older = state(id: 1, age: 599)
+        let newer = state(id: 1, age: 300)
+        let selected = AircraftDisplayPolicy.choose(
+            [older, newer, older], at: now, bounds: bounds)
+        XCTAssertEqual(selected.count, 1)
+        XCTAssertEqual(selected.first?.positionAt, newer.positionAt)
+    }
+
+    func testTenMinuteExpiryBoundary() {
+        let aircraft = state(id: 1, age: 599)
         XCTAssertEqual(
             AircraftDisplayPolicy.choose(
                 [aircraft], at: now, bounds: bounds).count, 1)

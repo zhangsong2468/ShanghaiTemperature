@@ -19,9 +19,9 @@ def obj(object_key, isa, **fields):
 def plist(path, value):
     (ROOT / path).write_bytes(plistlib.dumps(value, sort_keys=False))
 
-sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift',
+sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift', 'App/AircraftPlaybackModel.swift', 'App/AircraftHistoryRuler.swift', 'App/AircraftFrameRenderer.swift',
            'Shared/WeatherModel.swift', 'Shared/TemperatureChartView.swift', 'Shared/WeatherService.swift',
-           'Shared/CommuteRainForecast.swift', 'Shared/AircraftService.swift', 'Shared/AircraftMetadata.swift', 'Shared/AircraftTracking.swift', 'Shared/AircraftSelection.swift', 'Shared/AircraftMapLayer.swift',
+           'Shared/CommuteRainForecast.swift', 'Shared/AircraftService.swift', 'Shared/AircraftHistory.swift', 'Shared/AircraftMetadata.swift', 'Shared/AircraftTracking.swift', 'Shared/AircraftSelection.swift', 'Shared/AircraftMapLayer.swift',
            'Shared/HistoricalWeatherArchive.swift', 'Shared/ThermalComparison.swift',
            'Shared/ThermalSourceSettings.swift', 'Shared/NetworkApparentTemperature.swift',
            'Shared/DynamicThermalBands.swift', 'Shared/ThermalMapGeometry.swift', 'Shared/ThermalMapView.swift', 'Shared/SolarTermCalendar.swift', 'Shared/ThermalSurface.swift',
@@ -60,7 +60,7 @@ for extension in [False, True]:
     obj(prefix+':sources', 'PBXSourcesBuildPhase', buildActionMask='2147483647', files=builds, runOnlyForDeploymentPostprocessing='0')
     frameworks = [obj(prefix+':framework:'+str(i),'PBXBuildFile',fileRef=ref) for i,ref in enumerate(framework_refs)]
     obj(prefix+':frameworks','PBXFrameworksBuildPhase',buildActionMask='2147483647',files=frameworks,runOnlyForDeploymentPostprocessing='0')
-    resources = [obj('weather-history-build','PBXBuildFile',fileRef=history_ref), obj('thermal-map-build','PBXBuildFile',fileRef=map_ref)] if extension else [obj('app-assets-build','PBXBuildFile',fileRef=asset_ref), obj('icon-notice-build','PBXBuildFile',fileRef=notice_ref)]
+    resources = [obj('weather-history-build','PBXBuildFile',fileRef=history_ref), obj('thermal-map-build','PBXBuildFile',fileRef=map_ref)] if extension else [obj('app-assets-build','PBXBuildFile',fileRef=asset_ref), obj('icon-notice-build','PBXBuildFile',fileRef=notice_ref), obj('app-weather-history-build','PBXBuildFile',fileRef=history_ref), obj('app-thermal-map-build','PBXBuildFile',fileRef=map_ref)]
     obj(prefix+':resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=resources,runOnlyForDeploymentPostprocessing='0')
     config_ids = []
     for config in ['Debug','Release']:
@@ -72,7 +72,7 @@ for extension in [False, True]:
             'GENERATE_INFOPLIST_FILE':'NO','CODE_SIGN_STYLE':'Automatic',
             'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','SDKROOT':'macosx',
             'SUPPORTED_PLATFORMS':'macosx', 'ENABLE_HARDENED_RUNTIME':'YES',
-            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.3.11',
+            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.4.0',
             'LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks']+(['@executable_path/../../../../Frameworks'] if extension else []),
             'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O',
             'SWIFT_COMPILATION_MODE':'singlefile' if config=='Debug' else 'wholemodule',

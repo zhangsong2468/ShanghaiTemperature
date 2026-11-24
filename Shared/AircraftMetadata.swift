@@ -1,6 +1,6 @@
 import Foundation
 
-struct AircraftMetadata: Sendable {
+struct AircraftMetadata: Codable, Sendable {
     let model: String?
     let airline: String?
     let flightNumber: String?
