@@ -12,6 +12,21 @@ private final class AircraftPreparedLayoutCapture {
     var layout: AircraftMapDrawResult?
 }
 
+private enum WidgetAircraftVisibility {
+    static let maximumPositionAge: TimeInterval = 240
+
+    static func visible(
+        _ overlay: AircraftOverlaySnapshot?, at date: Date
+    ) -> [TrackedAircraft] {
+        guard let overlay else { return [] }
+        return overlay.visible(at: date).filter { item in
+            let age = date.timeIntervalSince(item.state.positionAt)
+            return age >= 0 && age < maximumPositionAge
+                && item.state.isVisible(at: date, bounds: overlay.bounds)
+        }
+    }
+}
+
 struct RegionalThermalMapProvider: TimelineProvider {
     private func replay() -> ThermalMapDisplay? {
         guard let folder=Bundle.main.url(forResource:"ThermalMap",withExtension:nil),
@@ -61,10 +76,11 @@ struct RegionalThermalMapProvider: TimelineProvider {
                 dates += [record.fetchedAt.addingTimeInterval(ForecastRecord.maximumCacheAge+1)]
             }
             if let overlay {
-                // Re-evaluate at the ten-minute position expiry.
+                // Re-evaluate at the widget-only four-minute position expiry.
                 // Preserve the original observation timestamps.
                 dates += overlay.aircraft.map { item in
-                    item.state.positionAt.addingTimeInterval(600)
+                    item.state.positionAt.addingTimeInterval(
+                        WidgetAircraftVisibility.maximumPositionAge)
                 }.filter { $0 > now }
             }
             let entries=Array(Set(dates.filter {$0>=now})).sorted().map { date in
@@ -103,7 +119,8 @@ struct RegionalThermalMapProvider: TimelineProvider {
         if overlay.frozenAt != nil { return overlay }
         let view = ThermalMapView(
             display:display,
-            aircraft:overlay.visible(at:preparedAt),
+            aircraft:WidgetAircraftVisibility.visible(
+                overlay, at:preparedAt),
             aircraftMetadata:overlay.metadata,
             aircraftBounds:overlay.bounds,
             previousAircraftLabelPositions:overlay.labelPositions,
@@ -199,11 +216,8 @@ struct RegionalThermalMapWidget: Widget {
             ThermalMapView(
                 display:entry.display,
                 preparedCanvasSize:entry.aircraftCanvasSize,
-                aircraft:entry.aircraftOverlay?.visible(at:entry.date).filter {
-                    $0.state.isVisible(
-                        at:entry.date,
-                        bounds:entry.aircraftOverlay!.bounds)
-                } ?? [],
+                aircraft:WidgetAircraftVisibility.visible(
+                    entry.aircraftOverlay, at:entry.date),
                 aircraftFrozenAt:nil,
                 aircraftMetadata:entry.aircraftOverlay?.metadata ?? [:],
                 aircraftBounds:entry.aircraftOverlay?.bounds,
