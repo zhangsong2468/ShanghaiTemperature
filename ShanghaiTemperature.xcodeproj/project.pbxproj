@@ -455,7 +455,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.4.4";
+				"MARKETING_VERSION" = "0.4.6";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"SWIFT_COMPILATION_MODE" = "singlefile";
@@ -478,7 +478,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.4.4";
+				"MARKETING_VERSION" = "0.4.6";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"SWIFT_COMPILATION_MODE" = "wholemodule";
@@ -641,7 +641,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.4.4";
+				"MARKETING_VERSION" = "0.4.6";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-Onone";
 				"SWIFT_COMPILATION_MODE" = "singlefile";
@@ -665,7 +665,7 @@
 				"SUPPORTED_PLATFORMS" = "macosx";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"CURRENT_PROJECT_VERSION" = "2";
-				"MARKETING_VERSION" = "0.4.4";
+				"MARKETING_VERSION" = "0.4.6";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks");
 				"SWIFT_OPTIMIZATION_LEVEL" = "-O";
 				"SWIFT_COMPILATION_MODE" = "wholemodule";

@@ -241,7 +241,8 @@ enum AircraftMapLayer {
     static func render(
         _ layout: AircraftMapDrawResult,
         context: inout GraphicsContext,
-        color: Color = aircraftColor
+        color: Color = aircraftColor,
+        labelColor: Color? = nil
     ) {
         for icon in layout.icons {
             guard let native = NSImage(
@@ -261,7 +262,7 @@ enum AircraftMapLayer {
         for label in layout.labels {
             let text = context.resolve(Text(verbatim: label.text)
                 .font(.system(size: fontSize, weight: .medium))
-                .foregroundColor(color))
+                .foregroundColor(labelColor ?? color))
             var layer = context
             layer.addFilter(.shadow(
                 color: Color(nsColor: .windowBackgroundColor).opacity(0.9),
