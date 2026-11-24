@@ -60,7 +60,7 @@ struct RegionalThermalMapProvider: TimelineProvider {
             if let record=update.record {
                 dates += [record.fetchedAt.addingTimeInterval(ForecastRecord.maximumCacheAge+1)]
             }
-            if let overlay, overlay.frozenAt == nil {
+            if let overlay {
                 // Re-evaluate at the ten-minute position expiry.
                 // Preserve the original observation timestamps.
                 dates += overlay.aircraft.map { item in
@@ -199,8 +199,12 @@ struct RegionalThermalMapWidget: Widget {
             ThermalMapView(
                 display:entry.display,
                 preparedCanvasSize:entry.aircraftCanvasSize,
-                aircraft:entry.aircraftOverlay?.visible(at:entry.date) ?? [],
-                aircraftFrozenAt:entry.aircraftOverlay?.frozenAt,
+                aircraft:entry.aircraftOverlay?.visible(at:entry.date).filter {
+                    $0.state.isVisible(
+                        at:entry.date,
+                        bounds:entry.aircraftOverlay!.bounds)
+                } ?? [],
+                aircraftFrozenAt:nil,
                 aircraftMetadata:entry.aircraftOverlay?.metadata ?? [:],
                 aircraftBounds:entry.aircraftOverlay?.bounds,
                 previousAircraftLabelPositions:
