@@ -44,7 +44,7 @@ struct ContentView: View {
                             Text("已到允许查询时间，等待系统调度。")
                         }
                     } else {
-                        Text("飞机查询间隔：5 min（300 s）")
+                        Text("飞机查询间隔：10 min（600 s）")
                         Text("下次允许查询：等待地图组件首次请求")
                     }
                 }

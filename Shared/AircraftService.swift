@@ -1,5 +1,6 @@
 import Foundation
 import CoreFoundation
+import OSLog
 
 struct AircraftBounds: Codable, Equatable, Sendable {
     let west: Double
@@ -153,22 +154,21 @@ actor AircraftStore {
     private var record: AircraftRecord?
     private var nextRequest: Date = .distantPast
     private var remainingCredits: Int?
-    private var backoffLevel = 0
+    private let logger = Logger(
+        subsystem: "com.songa.ShanghaiTemperature",
+        category: "OpenSky"
+    )
 
     private var currentInterval: TimeInterval {
-        max(refreshInterval, AircraftRequestStatus.interval(level: backoffLevel))
-    }
-
-    private var backoffFile: URL {
-        directory.appendingPathComponent("backoff-level.json")
+        refreshInterval
     }
     private var inFlight: Task<AircraftUpdate, Never>?
     private var inFlightBounds: AircraftBounds?
 
-    init(directory: URL? = nil, session: URLSession? = nil, refreshInterval: TimeInterval = 300) {
+    init(directory: URL? = nil, session: URLSession? = nil, refreshInterval: TimeInterval = 600) {
         self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory,
             in: .userDomainMask)[0].appendingPathComponent("ShanghaiTemperature/Aircraft-v1", isDirectory: true)
-        self.refreshInterval = refreshInterval.isFinite ? max(60, refreshInterval) : 300
+        self.refreshInterval = refreshInterval.isFinite ? max(600, refreshInterval) : 600
         if let session { self.session = session }
         else {
             let config = URLSessionConfiguration.ephemeral
@@ -213,11 +213,6 @@ actor AircraftStore {
            saved.schema == 1, saved.bounds.isValid {
             record = saved
         }
-        if let data = try? Data(contentsOf: backoffFile),
-           let saved = try? JSONDecoder().decode(Int.self, from: data),
-           saved >= 0 {
-            backoffLevel = max(backoffLevel, saved)
-        }
         if let data = try? Data(contentsOf: throttleFile),
            let saved = try? JSONDecoder().decode(Date.self, from: data) {
             nextRequest = max(nextRequest, saved)
@@ -227,21 +222,21 @@ actor AircraftStore {
             return update(bounds: bounds, now: now)
         }
         nextRequest = now.addingTimeInterval(currentInterval)
-        persistThrottle()
+        guard persistThrottle() else {
+            logger.error("Request blocked: cannot persist throttle")
+            return update(bounds: bounds, now: now)
+        }
+        let requestID = UUID().uuidString
         do {
             var request = URLRequest(url: try AircraftDecoder.url(bounds: bounds))
             request.timeoutInterval = 8
+            logger.notice("Request start id=\(requestID, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier) bounds=\(bounds.west),\(bounds.south),\(bounds.east),\(bounds.north)")
             let (data, response) = try await session.data(for: request)
             let receivedAt = Date()
             guard let http = response as? HTTPURLResponse else {
                 throw AircraftServiceError.invalidResponse
             }
             remainingCredits = http.value(forHTTPHeaderField: "X-Rate-Limit-Remaining").flatMap(Int.init)
-            if http.statusCode == 429 {
-                if backoffLevel < Int.max - 1 {
-                    backoffLevel += 1
-                }
-            }
             var delay = currentInterval
             if let value = http.value(forHTTPHeaderField: "Retry-After") {
                 if let seconds = Double(value), seconds.isFinite, seconds >= 0 {
@@ -260,20 +255,22 @@ actor AircraftStore {
                let seconds = Double(value), seconds.isFinite, seconds >= 0 {
                 delay = max(delay, seconds)
             }
-            if http.statusCode != 429 && remainingCredits == 0 {
-                delay = max(delay, 3600)
-            }
-            if http.statusCode == 401 || http.statusCode == 403 { delay = max(delay, 3600) }
             nextRequest = receivedAt.addingTimeInterval(delay)
             persistThrottle()
+            let retryAfter = http.value(forHTTPHeaderField: "Retry-After") ?? "-"
+            let retrySeconds = http.value(forHTTPHeaderField: "X-Rate-Limit-Retry-After-Seconds") ?? "-"
+            let credits = remainingCredits.map { String($0) } ?? "-"
+            let next = ISO8601DateFormatter().string(from: nextRequest)
+            logger.notice("Response id=\(requestID, privacy: .public) status=\(http.statusCode) bytes=\(data.count) credits=\(credits, privacy: .public) retryAfter=\(retryAfter, privacy: .public) retrySeconds=\(retrySeconds, privacy: .public) waitSeconds=\(delay) next=\(next, privacy: .public)")
             guard http.statusCode == 200, data.count <= 5_000_000 else {
                 throw AircraftServiceError.invalidResponse
             }
             let saved = try AircraftDecoder.decode(data, bounds: bounds, now: receivedAt)
             record = saved
+            logger.notice("Decoded id=\(requestID, privacy: .public) aircraft=\(saved.states.count)")
             try? JSONEncoder().encode(saved).write(to: file, options: .atomic)
         } catch {
-            NSLog("Aircraft refresh failed: %@", String(describing: error))
+            logger.error("Request failed id=\(requestID, privacy: .public) error=\(String(describing: error), privacy: .public)")
         }
         return update(bounds: bounds, now: Date())
     }
@@ -290,11 +287,19 @@ actor AircraftStore {
             remainingCredits: remainingCredits)
     }
 
-    private func persistThrottle() {
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(nextRequest).write(to: throttleFile, options: .atomic)
-        try? JSONEncoder().encode(backoffLevel).write(to: backoffFile, options: .atomic)
-        AircraftRequestStatus.publish(
-            interval: currentInterval, nextRequest: nextRequest)
+    @discardableResult
+    private func persistThrottle() -> Bool {
+        do {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            try JSONEncoder().encode(nextRequest).write(
+                to: throttleFile, options: .atomic)
+            AircraftRequestStatus.publish(
+                interval: currentInterval, nextRequest: nextRequest)
+            return true
+        } catch {
+            logger.error("Throttle save failed: \(String(describing: error), privacy: .public)")
+            return false
+        }
     }
 }

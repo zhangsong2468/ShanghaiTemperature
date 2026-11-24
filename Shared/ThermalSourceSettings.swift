@@ -34,14 +34,6 @@ struct AircraftRequestStatus: Codable {
 
     private static let key = "aircraftRequestStatus"
 
-    static func interval(level: Int) -> TimeInterval {
-        let minutes: [Double] = [5, 10, 20, 30, 40, 50, 60]
-        if level < minutes.count {
-            return minutes[max(0, level)] * 60
-        }
-        return Double(level - 5) * 3600
-    }
-
     static func publish(interval: TimeInterval, nextRequest: Date) {
         let status = AircraftRequestStatus(
             interval: interval, nextRequest: nextRequest, updatedAt: Date())
