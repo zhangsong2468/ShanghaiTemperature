@@ -24,6 +24,7 @@ final class AircraftPlaybackModel: ObservableObject {
     private var refreshGeneration = UUID()
     private var followAfter = Date.distantPast
     private var restored = false
+    private var transitionImage: CGImage?
 
     // Updated by window notifications and sleep/wake events.
     // No observations are skipped while presentation is suspended.
@@ -37,14 +38,18 @@ final class AircraftPlaybackModel: ObservableObject {
     }
 
     @discardableResult
-    private func publish(_ frame: AircraftHistoryPresentation) -> Bool {
+    private func publish(
+        _ frame: AircraftHistoryPresentation,
+        preparedImage: CGImage? = nil
+    ) -> Bool {
         guard !frame.selectedIDs.isEmpty,
-              let prepared = AircraftFrameRenderer.image(for: frame) else {
+              let prepared = preparedImage ?? AircraftFrameRenderer.image(for: frame) else {
             return false
         }
         // All icons and labels have been rendered before this single commit.
         // MainActor serialization prevents a gesture from interleaving here.
         aircraftImage = prepared
+        transitionImage = nil
         overlay = frame.overlay
         displayedAt = frame.fetchedAt
         sliderDate = frame.fetchedAt
@@ -146,6 +151,8 @@ final class AircraftPlaybackModel: ObservableObject {
         gestureRecords = available
         gestureStart = displayedAt ?? sliderDate ?? end
 
+        restoreTransitionImage()
+
         // Keep exactly the endpoints visible when the gesture began.
         rangeLocked = true
         return true
@@ -204,6 +211,7 @@ final class AircraftPlaybackModel: ObservableObject {
         intervalText = hour(start) + " → " + hour(target)
         playbackTask = Task { [weak self] in
             guard let self else { return }
+            var hasPublishedFrame = false
             for record in sequence {
                 guard !Task.isCancelled,
                       self.generation == operation else { return }
@@ -212,16 +220,28 @@ final class AircraftPlaybackModel: ObservableObject {
                     for: record)
                 guard !Task.isCancelled,
                       self.generation == operation else { return }
-                guard !frame.selectedIDs.isEmpty else { continue }
+                guard !frame.selectedIDs.isEmpty,
+                      let prepared = AircraftFrameRenderer.image(for: frame) else {
+                    continue
+                }
 
                 guard await self.waitUntilVisible(operation: operation) else {
                     return
                 }
-                guard self.publish(frame) else { continue }
+                if hasPublishedFrame {
+                    // Prepare the next frame before clearing only the aircraft layer.
+                    self.transitionImage = self.aircraftImage
+                    self.aircraftImage = nil
+                    guard await self.holdFrame(
+                        for: 0.5, operation: operation) else { return }
+                }
+                guard self.publish(frame, preparedImage: prepared) else { continue }
+                hasPublishedFrame = true
 
-                // A full second of active viewing for each nonempty frame.
+                // Five seconds of active viewing for each nonempty frame.
                 // Slow preparation extends playback rather than skipping frames.
-                guard await self.holdFrame(operation: operation) else { return }
+                guard await self.holdFrame(
+                    for: 5, operation: operation) else { return }
             }
             guard !Task.isCancelled,
                   self.generation == operation else { return }
@@ -240,8 +260,10 @@ final class AircraftPlaybackModel: ObservableObject {
         return !Task.isCancelled && generation == operation
     }
 
-    private func holdFrame(operation: UUID) async -> Bool {
-        var remaining: TimeInterval = 1
+    private func holdFrame(
+        for duration: TimeInterval, operation: UUID
+    ) async -> Bool {
+        var remaining = duration
         while remaining > 0 {
             guard await waitUntilVisible(operation: operation) else {
                 return false
@@ -261,7 +283,15 @@ final class AircraftPlaybackModel: ObservableObject {
         return true
     }
 
+    private func restoreTransitionImage() {
+        if let transitionImage {
+            aircraftImage = transitionImage
+            self.transitionImage = nil
+        }
+    }
+
     private func finishOperation() {
+        restoreTransitionImage()
         playing = false
         intervalText = nil
         if let displayedAt, let start = rangeStart, let end = rangeEnd {
@@ -278,6 +308,7 @@ final class AircraftPlaybackModel: ObservableObject {
 
     // Used when the owning view is removed; retain its last complete frame.
     func stop() {
+        restoreTransitionImage()
         playbackTask?.cancel()
         playbackTask = nil
         generation = UUID()
