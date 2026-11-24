@@ -8,8 +8,9 @@ final class AircraftPlaybackModel: ObservableObject {
     @Published private(set) var overlay: AircraftOverlaySnapshot?
     @Published private(set) var displayedAt: Date?
     @Published private(set) var sliderDate: Date?
-    @Published private(set) var rangeStart: Date?
-    @Published private(set) var rangeEnd: Date?
+    @Published private(set) var rangeStart: Date? =
+        Date().addingTimeInterval(-86400)
+    @Published private(set) var rangeEnd: Date? = Date()
     @Published private(set) var dragging = false
     @Published private(set) var playing = false
     @Published private(set) var intervalText: String?
@@ -62,8 +63,7 @@ final class AircraftPlaybackModel: ObservableObject {
         records = recent
 
         if !rangeLocked {
-            rangeStart = recent.first?.fetchedAt
-            rangeEnd = recent.last?.fetchedAt
+            updateRange(using: recent, now: now)
         }
 
         if !restored {
@@ -102,11 +102,25 @@ final class AircraftPlaybackModel: ObservableObject {
         guard !frame.selectedIDs.isEmpty,
               publish(frame) else { return }
         rangeLocked = false
-        rangeStart = recent.first?.fetchedAt
-        rangeEnd = recent.last?.fetchedAt
+        updateRange(using: recent, now: now)
     }
 
-    // Returns false when there is no historical range to manipulate.
+    private func updateRange(
+        using recent: [AircraftRecord], now: Date
+    ) {
+        if let first = recent.first,
+           let last = recent.last,
+           first.fetchedAt < last.fetchedAt {
+            rangeStart = first.fetchedAt
+            rangeEnd = last.fetchedAt
+        } else {
+            // Always show a usable ruler, including before first acquisition.
+            rangeStart = now.addingTimeInterval(-86400)
+            rangeEnd = now
+        }
+    }
+
+    // A default 24-hour range remains draggable without aircraft history.
     @discardableResult
     func beginDragging() -> Bool {
         guard let start = rangeStart,
@@ -115,8 +129,6 @@ final class AircraftPlaybackModel: ObservableObject {
         let available = records.filter {
             $0.fetchedAt >= start && $0.fetchedAt <= end
         }
-        guard !available.isEmpty else { return false }
-
         playbackTask?.cancel()
         playbackTask = nil
         generation = UUID()
@@ -126,7 +138,7 @@ final class AircraftPlaybackModel: ObservableObject {
         intervalText = nil
 
         gestureRecords = available
-        gestureStart = displayedAt ?? end
+        gestureStart = displayedAt ?? sliderDate ?? end
 
         // Keep exactly the endpoints visible when the gesture began.
         rangeStart = start
@@ -249,7 +261,7 @@ final class AircraftPlaybackModel: ObservableObject {
         intervalText = nil
         if let displayedAt, let start = rangeStart, let end = rangeEnd {
             sliderDate = min(end, max(start, displayedAt))
-        } else {
+        } else if let displayedAt {
             sliderDate = displayedAt
         }
         playbackTask = nil
@@ -267,7 +279,9 @@ final class AircraftPlaybackModel: ObservableObject {
         dragging = false
         playing = false
         intervalText = nil
-        sliderDate = displayedAt
+        if let displayedAt {
+            sliderDate = displayedAt
+        }
         followAfter = Date()
     }
 }

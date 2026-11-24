@@ -47,27 +47,24 @@ struct ContentView: View {
             AircraftHistoryRuler(model: playback)
                 .padding(.horizontal, 18)
 
-            HStack {
-                Spacer()
-                if let text = playback.intervalText {
-                    Text(text)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
-                Spacer()
-            }
-            .overlay(alignment: .trailing) {
+            HStack(spacing: 8) {
+                Text(playback.intervalText ?? "")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .frame(maxWidth: .infinity, alignment: .center)
+
                 Button {
                     expanded.toggle()
                 } label: {
                     Text(expanded ? "⚙ 收起" : "⚙ 展开")
                         .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.white.opacity(0.65))
                         .padding(.vertical, 6)
-                        .padding(.leading, 10)
+                        .padding(.horizontal, 6)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
             }
             .frame(height: 25)
             .padding(.horizontal, 18)
@@ -77,7 +74,8 @@ struct ContentView: View {
             }
         }
         .frame(width: 406)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(
+            .sRGB, red: 0.25, green: 0.25, blue: 0.27, opacity: 1))
         .background(AircraftMapWindowReader(reference: mapWindow))
         .task {
             await playback.refreshHistory()
