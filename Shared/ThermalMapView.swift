@@ -183,6 +183,7 @@ struct ThermalMapView: View {
     let display: ThermalMapDisplay
     var preparedCanvasSize: CGSize? = nil
     let aircraft: [TrackedAircraft]
+    let aircraftFrozenAt: Date?
     let aircraftMetadata: [String: AircraftMetadata]
     let aircraftBounds: AircraftBounds?
     let previousAircraftLabelPositions: [String: Int]
@@ -193,6 +194,7 @@ struct ThermalMapView: View {
     init(display: ThermalMapDisplay,
          preparedCanvasSize: CGSize? = nil,
          aircraft: [TrackedAircraft] = [],
+         aircraftFrozenAt: Date? = nil,
          aircraftMetadata: [String: AircraftMetadata] = [:],
          aircraftBounds: AircraftBounds? = nil,
          previousAircraftLabelPositions: [String: Int] = [:],
@@ -201,6 +203,7 @@ struct ThermalMapView: View {
         self.display=display
         self.preparedCanvasSize=preparedCanvasSize
         self.aircraft=aircraft
+        self.aircraftFrozenAt=aircraftFrozenAt
         self.aircraftMetadata=aircraftMetadata
         self.aircraftBounds=aircraftBounds
         self.previousAircraftLabelPositions=previousAircraftLabelPositions
@@ -301,6 +304,7 @@ struct ThermalMapView: View {
         if !display.isReplay, let aircraftBounds {
             let layout = AircraftMapLayer.layout(
                 context:context,
+                frozen:aircraftFrozenAt != nil,
                 canvas:CGRect(origin:.zero,size:size),
                 aircraft:aircraft,
                 metadata:aircraftMetadata,
@@ -308,7 +312,7 @@ struct ThermalMapView: View {
                 previousLabelPositions:previousAircraftLabelPositions,
                 preferredIDs:preferredAircraftIDs,
                 preferredShanghaiIDs:preferredShanghaiAircraftIDs,
-                now:display.date,
+                now:aircraftFrozenAt ?? display.date,
                 bounds:aircraftBounds,
                 project: { longitude,latitude in
                     projection.point(longitude:longitude,latitude:latitude)

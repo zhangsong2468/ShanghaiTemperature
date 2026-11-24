@@ -148,6 +148,7 @@ enum AircraftSelector {
 
 
 struct AircraftOverlaySnapshot: Sendable {
+    var frozenAt: Date? = nil
     var labelPositions: [String: Int] = [:]
     let selectedIDs: Set<String>
     let shanghaiIDs: Set<String>
@@ -157,6 +158,9 @@ struct AircraftOverlaySnapshot: Sendable {
     let refreshAfter: Date
 
     func visible(at date: Date) -> [TrackedAircraft] {
+        if frozenAt != nil {
+            return aircraft.filter { selectedIDs.contains($0.state.icao24) }
+        }
         let ids = Set(AircraftDisplayPolicy.choose(
             aircraft.map { $0.state }, at: date, bounds: bounds
         ).map { $0.icao24 })
@@ -174,6 +178,49 @@ private struct AircraftPreviousSelection: Codable {
 actor AircraftOverlayStore {
     static let shared = AircraftOverlayStore()
     private var previous: AircraftPreviousSelection?
+    private var latestPrepared: AircraftFrozenOverlay?
+
+    private var frozenFile: URL {
+        file.deletingLastPathComponent().appendingPathComponent("frozen-overlay.json")
+    }
+
+    private func restorePrepared() {
+        guard latestPrepared == nil,
+              let data = try? Data(contentsOf: frozenFile),
+              let saved = try? JSONDecoder().decode(
+                AircraftFrozenOverlay.self, from: data) else { return }
+        latestPrepared = saved
+    }
+
+    func rememberPrepared(_ overlay: AircraftOverlaySnapshot, at date: Date) {
+        guard overlay.frozenAt == nil else { return }
+        let pause = AircraftPauseSettings.current
+        guard !pause.paused else { return }
+        let saved = AircraftFrozenOverlay(
+            overlay: overlay, date: date, generation: pause.generation)
+        latestPrepared = saved
+        do {
+            try FileManager.default.createDirectory(
+                at: frozenFile.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try JSONEncoder().encode(saved).write(
+                to: frozenFile, options: .atomic)
+        } catch {
+            NSLog("Aircraft frozen snapshot save failed: %@", String(describing: error))
+        }
+    }
+
+    private func frozen(bounds: AircraftBounds) -> AircraftOverlaySnapshot {
+        restorePrepared()
+        if let latestPrepared {
+            return latestPrepared.snapshot
+        }
+        return AircraftOverlaySnapshot(
+            frozenAt: Date(),
+            selectedIDs: [], shanghaiIDs: [], aircraft: [],
+            metadata: [:], bounds: bounds,
+            refreshAfter: Date().addingTimeInterval(3600))
+    }
 
     private var file: URL {
         FileManager.default.urls(
@@ -183,8 +230,29 @@ actor AircraftOverlayStore {
     }
 
     func load(bounds: AircraftBounds) async -> AircraftOverlaySnapshot {
+        restorePrepared()
+        let started = AircraftPauseSettings.current
+        if started.paused { return frozen(bounds: bounds) }
         let update = await AircraftStore.shared.load(bounds: bounds)
         let initialDate = Date()
+        let current = AircraftPauseSettings.current
+        if current.paused || current.generation != started.generation {
+            return frozen(bounds: bounds)
+        }
+        // After resume, preserve the frozen display until a new successful
+        // OpenSky response arrives. A successful empty response also qualifies.
+        if latestPrepared?.generation != current.generation,
+           current.generation != "initial",
+           (update.record?.fetchedAt ?? .distantPast) < current.changedAt {
+            var held = frozen(bounds: bounds)
+            held = AircraftOverlaySnapshot(
+                frozenAt: held.frozenAt,
+                labelPositions: held.labelPositions,
+                selectedIDs: held.selectedIDs, shanghaiIDs: held.shanghaiIDs,
+                aircraft: held.aircraft, metadata: held.metadata,
+                bounds: held.bounds, refreshAfter: update.refreshAfter)
+            return held
+        }
         if previous == nil,
            let data = try? Data(contentsOf: file),
            let saved = try? JSONDecoder().decode(
@@ -285,6 +353,10 @@ actor AircraftOverlayStore {
                 metadata[id] = AircraftMetadata(
                     model: model, airline: nil, flightNumber: nil)
             }
+        }
+        let latestPause = AircraftPauseSettings.current
+        if latestPause.paused || latestPause.generation != started.generation {
+            return frozen(bounds: bounds)
         }
         return AircraftOverlaySnapshot(
             labelPositions: previous?.labelPositions ?? [:],
@@ -402,5 +474,65 @@ actor AircraftOverlayStore {
             }
             return result
         }
+    }
+}
+
+
+private struct AircraftFrozenOverlay: Codable {
+    struct Item: Codable {
+        let state: AircraftState
+        let kind: Int
+        let firstSeen: Date
+    }
+    struct Metadata: Codable {
+        let model: String?
+        let airline: String?
+        let flightNumber: String?
+    }
+    let date: Date
+    let generation: String
+    let labelPositions: [String: Int]
+    let selectedIDs: Set<String>
+    let shanghaiIDs: Set<String>
+    let items: [Item]
+    let metadata: [String: Metadata]
+    let bounds: AircraftBounds
+    let refreshAfter: Date
+
+    init(overlay: AircraftOverlaySnapshot, date: Date, generation: String) {
+        self.date = date
+        self.generation = generation
+        labelPositions = overlay.labelPositions
+        selectedIDs = overlay.selectedIDs
+        shanghaiIDs = overlay.shanghaiIDs
+        items = overlay.aircraft.filter {
+            overlay.selectedIDs.contains($0.state.icao24)
+        }.map {
+            Item(state: $0.state, kind: $0.kind.rawValue, firstSeen: $0.firstSeen)
+        }
+        metadata = overlay.metadata.mapValues {
+            Metadata(model: $0.model, airline: $0.airline, flightNumber: $0.flightNumber)
+        }
+        bounds = overlay.bounds
+        refreshAfter = overlay.refreshAfter
+    }
+
+    var snapshot: AircraftOverlaySnapshot {
+        AircraftOverlaySnapshot(
+            frozenAt: date,
+            labelPositions: labelPositions,
+            selectedIDs: selectedIDs,
+            shanghaiIDs: shanghaiIDs,
+            aircraft: items.map {
+                TrackedAircraft(
+                    state: $0.state,
+                    kind: AircraftKind(rawValue: $0.kind) ?? .other,
+                    firstSeen: $0.firstSeen)
+            },
+            metadata: metadata.mapValues {
+                AircraftMetadata(
+                    model: $0.model, airline: $0.airline, flightNumber: $0.flightNumber)
+            },
+            bounds: bounds, refreshAfter: refreshAfter)
     }
 }

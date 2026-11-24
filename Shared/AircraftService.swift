@@ -221,6 +221,9 @@ actor AircraftStore {
             persistThrottle()
             return update(bounds: bounds, now: now)
         }
+        guard !AircraftPauseSettings.current.paused else {
+            return update(bounds: bounds, now: now)
+        }
         nextRequest = now.addingTimeInterval(currentInterval)
         guard persistThrottle() else {
             logger.error("Request blocked: cannot persist throttle")
@@ -231,7 +234,9 @@ actor AircraftStore {
             var request = URLRequest(url: try AircraftDecoder.url(bounds: bounds))
             request.timeoutInterval = 8
             logger.notice("Request start id=\(requestID, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier) bounds=\(bounds.west),\(bounds.south),\(bounds.east),\(bounds.north)")
-            let (data, response) = try await session.data(for: request)
+            let generation = AircraftPauseSettings.current.generation
+            let (data, response) = try await AircraftPauseSettings.data(
+                for: request, session: session)
             let receivedAt = Date()
             guard let http = response as? HTTPURLResponse else {
                 throw AircraftServiceError.invalidResponse
@@ -264,6 +269,10 @@ actor AircraftStore {
             logger.notice("Response id=\(requestID, privacy: .public) status=\(http.statusCode) bytes=\(data.count) credits=\(credits, privacy: .public) retryAfter=\(retryAfter, privacy: .public) retrySeconds=\(retrySeconds, privacy: .public) waitSeconds=\(delay) next=\(next, privacy: .public)")
             guard http.statusCode == 200, data.count <= 5_000_000 else {
                 throw AircraftServiceError.invalidResponse
+            }
+            let pause = AircraftPauseSettings.current
+            guard !pause.paused, pause.generation == generation else {
+                return update(bounds: bounds, now: Date())
             }
             let saved = try AircraftDecoder.decode(data, bounds: bounds, now: receivedAt)
             record = saved

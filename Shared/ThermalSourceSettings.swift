@@ -70,3 +70,78 @@ struct AircraftRequestStatus: Codable {
         return formatter.string(from: nextRequest) + "（上海时间）"
     }
 }
+
+
+struct AircraftPauseState: Codable, Equatable {
+    var paused = false
+    var generation = UUID().uuidString
+    var changedAt = Date.distantPast
+}
+
+enum AircraftPauseSettings {
+    private static let key = "aircraftPauseState"
+
+    static var current: AircraftPauseState {
+        CFPreferencesAppSynchronize(ThermalSourceSettings.domain as CFString)
+        guard let text = CFPreferencesCopyAppValue(
+            key as CFString,
+            ThermalSourceSettings.domain as CFString) as? String,
+              let data = text.data(using: .utf8),
+              let value = try? JSONDecoder().decode(
+                AircraftPauseState.self, from: data) else {
+            // Stable default; repeated reads must not change generation.
+            return AircraftPauseState(
+                paused: false, generation: "initial", changedAt: .distantPast)
+        }
+        return value
+    }
+
+    static func save(paused: Bool) throws {
+        let value = AircraftPauseState(
+            paused: paused, generation: UUID().uuidString, changedAt: Date())
+        let data = try JSONEncoder().encode(value)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        CFPreferencesSetAppValue(
+            key as CFString, text as CFString,
+            ThermalSourceSettings.domain as CFString)
+        guard CFPreferencesAppSynchronize(
+            ThermalSourceSettings.domain as CFString),
+              current == value else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+    }
+
+    // Cancel an outstanding request when pause/resume changes its generation.
+    // HTTP headers already received by the caller are still processed normally.
+    static func data(
+        for request: URLRequest, session: URLSession
+    ) async throws -> (Data, URLResponse) {
+        let state = current
+        guard !state.paused else { throw CancellationError() }
+        let transfer = Task {
+            try await session.data(for: request)
+        }
+        let monitor = Task {
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 250_000_000)
+                } catch {
+                    return
+                }
+                let latest = current
+                if latest.paused || latest.generation != state.generation {
+                    transfer.cancel()
+                    return
+                }
+            }
+        }
+        defer { monitor.cancel() }
+        return try await withTaskCancellationHandler {
+            try await transfer.value
+        } onCancel: {
+            transfer.cancel()
+        }
+    }
+}

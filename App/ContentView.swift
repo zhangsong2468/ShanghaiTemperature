@@ -9,6 +9,8 @@ struct ContentView: View {
     @State private var refreshing = false
     @State private var useLocalThermal = ThermalSourceSettings.current == .local
     @State private var thermalSettingError: String?
+    @State private var pauseAircraft = AircraftPauseSettings.current.paused
+    @State private var aircraftSettingError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -38,19 +40,42 @@ struct ContentView: View {
             TimelineView(.periodic(from: .now, by: 5)) { _ in
                 VStack(alignment: .leading, spacing: 5) {
                     if let status = AircraftRequestStatus.current {
-                        Text("飞机查询间隔：" + status.intervalText)
+                        if !pauseAircraft {
+                            Text("飞机查询间隔：" + status.intervalText)
+                        }
                         Text("下次允许查询：" + status.nextRequestText)
-                        if status.nextRequest <= Date() {
+                        if !pauseAircraft && status.nextRequest <= Date() {
                             Text("已到允许查询时间，等待系统调度。")
                         }
                     } else {
-                        Text("飞机查询间隔：10 min（600 s）")
+                        if !pauseAircraft {
+                            Text("飞机查询间隔：10 min（600 s）")
+                        }
                         Text("下次允许查询：等待地图组件首次请求")
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle("暂停飞机更新", isOn: Binding(
+                get: { pauseAircraft },
+                set: { paused in
+                    do {
+                        try AircraftPauseSettings.save(paused: paused)
+                        pauseAircraft = paused
+                        aircraftSettingError = nil
+                        WidgetCenter.shared.reloadTimelines(
+                            ofKind: "ShanghaiTemperature.RegionalThermalMap")
+                    } catch {
+                        aircraftSettingError = "飞机更新设置未保存，请稍后重试。"
+                    }
+                }))
+                .toggleStyle(.switch)
+                .font(.callout)
+            if let aircraftSettingError {
+                Text(aircraftSettingError)
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Toggle("本地计算地图体感", isOn: Binding(
                 get: { useLocalThermal },

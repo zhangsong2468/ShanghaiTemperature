@@ -88,6 +88,7 @@ actor AircraftMetadataStore {
     }
 
     private func lookup(kind: String, identifier: String) async -> AircraftMetadataValue? {
+        guard !AircraftPauseSettings.current.paused else { return nil }
         let pattern = kind == "aircraft" ? "^[0-9a-f]{6}$" : "^[A-Z0-9]{2,12}$"
         guard identifier.range(of: pattern, options: .regularExpression) != nil else {
             return nil
@@ -137,12 +138,17 @@ actor AircraftMetadataStore {
         await acquireSlot()
         defer { releaseSlot() }
         restoreThrottle()
-        guard !Task.isCancelled, Date() >= blockedUntil else { return nil }
+        guard !Task.isCancelled,
+              !AircraftPauseSettings.current.paused,
+              Date() >= blockedUntil else { return nil }
+        let generation = AircraftPauseSettings.current.generation
         let result = await request(kind: kind, identifier: identifier)
         if let retry = result.retryAfter {
             blockedUntil = max(blockedUntil, retry)
             persistThrottle()
         }
+        let pause = AircraftPauseSettings.current
+        guard !pause.paused, pause.generation == generation else { return nil }
         let now = Date()
         let lifetime: TimeInterval
         if result.succeeded {
@@ -187,7 +193,8 @@ actor AircraftMetadataStore {
         do {
             var request = URLRequest(url: url)
             request.timeoutInterval = 8
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await AircraftPauseSettings.data(
+                for: request, session: session)
             guard let http = response as? HTTPURLResponse else { return failure }
             if http.statusCode != 200 {
                 let retry = Self.retryDate(http, now: Date())

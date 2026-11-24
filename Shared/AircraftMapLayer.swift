@@ -34,6 +34,7 @@ enum AircraftMapLayer {
 
     static func layout(
         context: GraphicsContext,
+        frozen: Bool = false,
         canvas: CGRect,
         aircraft: [TrackedAircraft],
         metadata: [String: AircraftMetadata],
@@ -104,7 +105,13 @@ enum AircraftMapLayer {
         }
         // Use explicit provider selection and hysteresis group membership.
         // Candidate array order is not a reliable selection record.
-        let selection = AircraftSelector.select(
+        let selection = frozen
+            ? AircraftSelectionResult(
+                aircraft: candidates.filter {
+                    preferredIDs.contains($0.state.icao24)
+                },
+                shanghaiIDs: preferredShanghaiIDs)
+            : AircraftSelector.select(
             candidates, bounds: bounds,
             previousIDs: preferredIDs,
             previousShanghaiIDs: preferredShanghaiIDs,

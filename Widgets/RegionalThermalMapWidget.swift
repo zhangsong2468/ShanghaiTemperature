@@ -60,7 +60,7 @@ struct RegionalThermalMapProvider: TimelineProvider {
             if let record=update.record {
                 dates += [record.fetchedAt.addingTimeInterval(ForecastRecord.maximumCacheAge+1)]
             }
-            if let overlay {
+            if let overlay, overlay.frozenAt == nil {
                 // Re-evaluate when fresh positions become stale and when
                 // the five-minute fallback expires. Preserve observation times.
                 dates += overlay.aircraft.flatMap { item in
@@ -77,7 +77,9 @@ struct RegionalThermalMapProvider: TimelineProvider {
             }
             let refresh = min(
                 update.refreshAfter,
-                overlay?.refreshAfter ?? update.refreshAfter)
+                AircraftPauseSettings.current.paused
+                    ? update.refreshAfter
+                    : (overlay?.refreshAfter ?? update.refreshAfter))
             completion(Timeline(entries:entries,
                 policy:.after(max(now.addingTimeInterval(60),refresh))))
         }
@@ -99,6 +101,7 @@ struct RegionalThermalMapProvider: TimelineProvider {
         guard var overlay, !display.isReplay,
               canvas.width.isFinite,canvas.height.isFinite,
               canvas.width > 4,canvas.height > 4 else { return overlay }
+        if overlay.frozenAt != nil { return overlay }
         let view = ThermalMapView(
             display:display,
             aircraft:overlay.visible(at:preparedAt),
@@ -136,6 +139,7 @@ struct RegionalThermalMapProvider: TimelineProvider {
             shanghaiIDs:layout.shanghaiIDs,
             labelPositions:layout.labelPositions,
             preparedAt:preparedAt)
+        await AircraftOverlayStore.shared.rememberPrepared(overlay, at: preparedAt)
         return overlay
     }
 
@@ -197,6 +201,7 @@ struct RegionalThermalMapWidget: Widget {
                 display:entry.display,
                 preparedCanvasSize:entry.aircraftCanvasSize,
                 aircraft:entry.aircraftOverlay?.visible(at:entry.date) ?? [],
+                aircraftFrozenAt:entry.aircraftOverlay?.frozenAt,
                 aircraftMetadata:entry.aircraftOverlay?.metadata ?? [:],
                 aircraftBounds:entry.aircraftOverlay?.bounds,
                 previousAircraftLabelPositions:
