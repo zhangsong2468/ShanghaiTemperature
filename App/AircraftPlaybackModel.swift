@@ -25,7 +25,7 @@ final class AircraftPlaybackModel: ObservableObject {
     private var followAfter = Date.distantPast
     private var restored = false
 
-    // Updated by the view when its window is inactive, hidden or sleeping.
+    // Updated by window notifications and sleep/wake events.
     // No observations are skipped while presentation is suspended.
     var presentationActive = true
 
@@ -54,6 +54,7 @@ final class AircraftPlaybackModel: ObservableObject {
     // Called after acquisition, and periodically to read shared widget history.
     // Reading history never sends a network request.
     func refreshHistory() async {
+        guard !dragging, !playing else { return }
         let refreshID = UUID()
         refreshGeneration = refreshID
         let now = Date()
@@ -108,16 +109,21 @@ final class AircraftPlaybackModel: ObservableObject {
     private func updateRange(
         using recent: [AircraftRecord], now: Date
     ) {
+        let start: Date
+        let end: Date
         if let first = recent.first,
            let last = recent.last,
            first.fetchedAt < last.fetchedAt {
-            rangeStart = first.fetchedAt
-            rangeEnd = last.fetchedAt
+            start = first.fetchedAt
+            end = last.fetchedAt
         } else {
-            // Always show a usable ruler, including before first acquisition.
-            rangeStart = now.addingTimeInterval(-86400)
-            rangeEnd = now
+            // Keep the empty ruler stable between minute boundaries.
+            end = ShanghaiTime.calendar.dateInterval(of: .minute, for: now)?.start
+                ?? now
+            start = end.addingTimeInterval(-86400)
         }
+        if rangeStart != start { rangeStart = start }
+        if rangeEnd != end { rangeEnd = end }
     }
 
     // A default 24-hour range remains draggable without aircraft history.
@@ -141,8 +147,6 @@ final class AircraftPlaybackModel: ObservableObject {
         gestureStart = displayedAt ?? sliderDate ?? end
 
         // Keep exactly the endpoints visible when the gesture began.
-        rangeStart = start
-        rangeEnd = end
         rangeLocked = true
         return true
     }
@@ -151,7 +155,8 @@ final class AircraftPlaybackModel: ObservableObject {
         guard dragging, let start = rangeStart, let end = rangeEnd else {
             return
         }
-        sliderDate = min(end, max(start, date))
+        let target = min(end, max(start, date))
+        if sliderDate != target { sliderDate = target }
     }
 
     // The gesture recognizer decides positioning versus interval selection.

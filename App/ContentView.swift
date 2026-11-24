@@ -1,10 +1,11 @@
 import SwiftUI
 import WidgetKit
 import AppKit
+import Combine
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var playback = AircraftPlaybackModel()
+    @State private var playback = AircraftPlaybackModel()
     @State private var expanded = false
     @State private var systemSleeping = false
     @StateObject private var mapWindow = AircraftMapWindowReference()
@@ -33,41 +34,12 @@ struct ContentView: View {
                 preparedCanvasSize: mapSize)
                 .frame(width: 406, height: 466)
                 .overlay {
-                    if let image = playback.aircraftImage {
-                        Image(decorative: image, scale: 1)
-                            .resizable()
-                            .interpolation(.high)
-                            .frame(
-                                width: mapSize.width,
-                                height: mapSize.height)
-                            .allowsHitTesting(false)
-                    }
+                    AircraftPlaybackImage(model: playback)
+                        .frame(width: mapSize.width, height: mapSize.height)
+                        .allowsHitTesting(false)
                 }
 
-            AircraftHistoryRuler(model: playback)
-                .padding(.horizontal, 18)
-
-            HStack(spacing: 8) {
-                Text(playback.intervalText ?? "")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                Button {
-                    expanded.toggle()
-                } label: {
-                    Text(expanded ? "⚙ 收起" : "⚙ 展开")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.65))
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 6)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .fixedSize()
-            }
-            .frame(height: 25)
-            .padding(.horizontal, 18)
+            AircraftPlaybackControls(model: playback, expanded: $expanded)
 
             if expanded {
                 configuration
@@ -75,42 +47,38 @@ struct ContentView: View {
         }
         .frame(width: 406)
         .background(Color(
-            .sRGB, red: 0.25, green: 0.25, blue: 0.27, opacity: 1))
+            .sRGB, red: 0.93, green: 0.94, blue: 0.95, opacity: 1))
+        .environment(\.colorScheme, .light)
         .background(AircraftMapWindowReader(reference: mapWindow))
         .task {
+            playback.presentationActive = mapWindow.presentable && !systemSleeping
             await playback.refreshHistory()
             while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 30_000_000_000) }
+                catch { break }
                 if playback.presentationActive {
                     await playback.refreshHistory()
                 }
-                do { try await Task.sleep(nanoseconds: 2_000_000_000) }
-                catch { break }
             }
         }
-        .task {
+        .task(id: "\(useLocalThermal)-\(systemSleeping)") {
+            guard !systemSleeping else { return }
             while !Task.isCancelled {
                 await refreshThermalIfNeeded()
-                do { try await Task.sleep(nanoseconds: 2_000_000_000) }
-                catch { break }
+                guard await waitForRefresh(until: nextThermal) else { break }
             }
         }
-        .task {
+        .task(id: "\(pauseAircraft)-\(systemSleeping)") {
+            guard !systemSleeping, !pauseAircraft else { return }
             while !Task.isCancelled {
                 await refreshAircraftIfNeeded()
-                do { try await Task.sleep(nanoseconds: 2_000_000_000) }
-                catch { break }
+                guard await waitForRefresh(until: nextAircraft) else { break }
             }
         }
-        .task {
-            while !Task.isCancelled {
-                let window = mapWindow.window
-                playback.presentationActive = !systemSleeping
-                    && !NSApplication.shared.isHidden
-                    && window?.isVisible == true
-                    && window?.isMiniaturized == false
-                    && window?.occlusionState.contains(.visible) == true
-                do { try await Task.sleep(nanoseconds: 100_000_000) }
-                catch { break }
+        .onChange(of: mapWindow.presentable) { _, visible in
+            playback.presentationActive = visible && !systemSleeping
+            if playback.presentationActive {
+                Task { await playback.refreshHistory() }
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -128,6 +96,8 @@ struct ContentView: View {
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(
             for: NSWorkspace.didWakeNotification)) { _ in
                 systemSleeping = false
+                mapWindow.refreshVisibility()
+                playback.presentationActive = mapWindow.presentable
         }
         .onDisappear {
             playback.presentationActive = false
@@ -151,7 +121,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
             }
 
-            TimelineView(.periodic(from: .now, by: 5)) { _ in
+            TimelineView(.periodic(from: .now, by: 30)) { _ in
                 VStack(alignment: .leading, spacing: 5) {
                     if !pauseAircraft {
                         HStack {
@@ -223,6 +193,7 @@ struct ContentView: View {
         loadingThermal = true
         defer { loadingThermal = false }
         let result = await RegionalThermalStore.shared.load()
+        guard !Task.isCancelled else { return }
         thermal = result
         nextThermal = max(Date().addingTimeInterval(30), result.refreshAfter)
     }
@@ -237,8 +208,19 @@ struct ContentView: View {
         loadingAircraft = true
         defer { loadingAircraft = false }
         let result = await AircraftOverlayStore.shared.load(bounds: bounds)
-        nextAircraft = max(Date().addingTimeInterval(10), result.refreshAfter)
+        guard !Task.isCancelled else { return }
+        nextAircraft = max(Date().addingTimeInterval(30), result.refreshAfter)
         await playback.refreshHistory()
+    }
+
+    private func waitForRefresh(until date: Date) async -> Bool {
+        let delay = min(3600, max(30, date.timeIntervalSinceNow))
+        do {
+            try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            return !Task.isCancelled
+        } catch {
+            return false
+        }
     }
 
     // Match the Canvas and projection used by ThermalMapView exactly.
@@ -277,10 +259,116 @@ struct ContentView: View {
 }
 
 
-// Track the actual owning window without retaining it or relying on its title.
+// Only these child views observe playback changes. Dragging the ruler does
+// not invalidate the temperature map in ContentView.
+private struct AircraftPlaybackImage: View {
+    @ObservedObject var model: AircraftPlaybackModel
+
+    var body: some View {
+        Group {
+            if let image = model.aircraftImage {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .interpolation(.high)
+            }
+        }
+    }
+}
+
+private struct AircraftPlaybackControls: View {
+    @ObservedObject var model: AircraftPlaybackModel
+    @Binding var expanded: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            AircraftHistoryRuler(model: model)
+                .padding(.horizontal, 18)
+
+            HStack(spacing: 8) {
+                Text(model.intervalText ?? "")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.black.opacity(0.50))
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                Button {
+                    expanded.toggle()
+                } label: {
+                    Text(expanded ? "⚙ 收起" : "⚙ 展开")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.black.opacity(0.60))
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 6)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+            .frame(height: 25)
+            .padding(.horizontal, 18)
+        }
+    }
+}
+
+// Observe the actual owning window without a polling task or retaining it.
 @MainActor
 private final class AircraftMapWindowReference: ObservableObject {
     weak var window: NSWindow?
+    @Published private(set) var presentable = false
+    private var subscriptions = Set<AnyCancellable>()
+
+    func attach(_ next: NSWindow?) {
+        if window === next {
+            refreshVisibility()
+            return
+        }
+        subscriptions.removeAll()
+        window = next
+        guard let next else {
+            setPresentable(false)
+            return
+        }
+        let center = NotificationCenter.default
+        for name in [NSWindow.didChangeOcclusionStateNotification,
+                     NSWindow.didMiniaturizeNotification,
+                     NSWindow.didDeminiaturizeNotification] {
+            center.publisher(for: name, object: next)
+                .sink { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.refreshVisibility()
+                    }
+                }
+                .store(in: &subscriptions)
+        }
+        for name in [NSApplication.didHideNotification,
+                     NSApplication.didUnhideNotification] {
+            center.publisher(for: name)
+                .sink { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.refreshVisibility()
+                    }
+                }
+                .store(in: &subscriptions)
+        }
+        center.publisher(for: NSWindow.willCloseNotification, object: next)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.setPresentable(false)
+                }
+            }
+            .store(in: &subscriptions)
+        refreshVisibility()
+    }
+
+    func refreshVisibility() {
+        setPresentable(!NSApplication.shared.isHidden
+            && window?.isVisible == true
+            && window?.isMiniaturized == false
+            && window?.occlusionState.contains(.visible) == true)
+    }
+
+    private func setPresentable(_ value: Bool) {
+        if presentable != value { presentable = value }
+    }
 }
 
 @MainActor
@@ -292,7 +380,7 @@ private struct AircraftMapWindowReader: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            reference?.window = window
+            reference?.attach(window)
         }
     }
 
@@ -304,6 +392,6 @@ private struct AircraftMapWindowReader: NSViewRepresentable {
 
     func updateNSView(_ view: Probe, context: Context) {
         view.reference = reference
-        reference.window = view.window
+        reference.attach(view.window)
     }
 }

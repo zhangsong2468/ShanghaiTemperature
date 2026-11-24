@@ -47,7 +47,7 @@ struct AircraftHistoryRuler: View {
                         Text(text(end, format: "MM/dd"))
                     }
                     .font(.system(size: 8))
-                    .foregroundStyle(Color.white.opacity(0.4))
+                    .foregroundStyle(Color.black.opacity(0.48))
                     .padding(.horizontal, inset)
                     .offset(y: 11)
                     .allowsHitTesting(false)
@@ -76,13 +76,13 @@ struct AircraftHistoryRuler: View {
                         }
                         context.stroke(
                             ticks,
-                            with: .color(.white.opacity(0.15)),
+                            with: .color(.black.opacity(0.20)),
                             lineWidth: 0.5)
                     }
                     .allowsHitTesting(false)
 
                     Circle()
-                        .fill(Color.white.opacity(0.75))
+                        .fill(Color.black.opacity(0.55))
                         .frame(width: 5, height: 5)
                         .position(x: x, y: 29)
                         .allowsHitTesting(false)
@@ -90,7 +90,7 @@ struct AircraftHistoryRuler: View {
                     if model.dragging {
                         Text(text(selected, format: "H"))
                             .font(.system(size: 4))
-                            .foregroundStyle(Color.white.opacity(0.55))
+                            .foregroundStyle(Color.black.opacity(0.55))
                             .fixedSize()
                             .position(
                                 x: min(
