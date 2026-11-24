@@ -18,7 +18,7 @@ struct ContentView: View {
     @State private var pauseAircraft = AircraftPauseSettings.current.paused
     @State private var settingError: String?
 
-    private let mapSize = CGSize(width: 200, height: 230)
+    private let mapSize = CGSize(width: 250, height: 288)
 
     private var display: ThermalMapDisplay {
         thermal?.projected(at: Date()) ?? ThermalMapDisplay(
@@ -32,7 +32,7 @@ struct ContentView: View {
                 display: display,
                 appPresentation: true,
                 preparedCanvasSize: mapSize)
-                .frame(width: 226, height: 256)
+                .frame(width: 276, height: 314)
                 .overlay {
                     AircraftPlaybackImage(model: playback)
                         .frame(width: mapSize.width, height: mapSize.height)
@@ -45,7 +45,7 @@ struct ContentView: View {
                 configuration
             }
         }
-        .frame(width: 226)
+        .frame(width: 276)
         .background(Color(
             .sRGB, red: 0.93, green: 0.94, blue: 0.95, opacity: 1))
         .environment(\.colorScheme, .light)

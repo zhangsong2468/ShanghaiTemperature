@@ -50,7 +50,7 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          version=0.4.6
+          version=0.4.8
           if [[ "$REF_TYPE" == tag ]]; then version="${REF_NAME#v}"; fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -95,6 +95,8 @@ jobs:
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           cat > release-notes.md <<'EOF'
+          0.4.8：主App地图调整为紧凑版的约125%，画布250×288点、外框276×314点；飞机图标保持白色，航班文字保持灰色。
+
           0.4.6：主App地图画布调整为200×230点，飞机图标保持白色，航班文字改为与小组件一致的灰色。保留历史播放与刷新优化。
 
           0.4.4：修复小组件冻结飞机绕过位置过期检查的问题，并为冻结画面安排位置过期时间线。主App历史播放行为保持原样。

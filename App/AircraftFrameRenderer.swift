@@ -4,7 +4,7 @@ import OSLog
 
 @MainActor
 enum AircraftFrameRenderer {
-    static let size = CGSize(width: 200, height: 230)
+    static let size = CGSize(width: 250, height: 288)
 
     private final class Capture {
         var layout: AircraftMapDrawResult?
