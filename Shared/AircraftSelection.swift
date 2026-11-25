@@ -145,28 +145,73 @@ enum AircraftSelector {
 }
 
 
+// Persist numeric geometry fields. CGPoint and CGSize are reconstructed
+// for drawing and do not participate in synthesized Codable.
 struct AircraftMapDrawResult: Codable, Sendable {
     struct Icon: Codable, Sendable {
         let id: String
         let symbol: String
-        let anchor: CGPoint
-        let width: CGFloat
-        let height: CGFloat
+        private let anchorX: Double
+        private let anchorY: Double
+        private let iconWidth: Double
+        private let iconHeight: Double
         let angle: Double
+
+        var anchor: CGPoint { CGPoint(x: CGFloat(anchorX), y: CGFloat(anchorY)) }
+        var width: CGFloat { CGFloat(iconWidth) }
+        var height: CGFloat { CGFloat(iconHeight) }
+
+        init(id: String, symbol: String, anchor: CGPoint,
+             width: CGFloat, height: CGFloat, angle: Double) {
+            self.id = id
+            self.symbol = symbol
+            anchorX = Double(anchor.x)
+            anchorY = Double(anchor.y)
+            iconWidth = Double(width)
+            iconHeight = Double(height)
+            self.angle = angle
+        }
     }
 
     struct Label: Codable, Sendable {
         let text: String
-        let origin: CGPoint
+        private let originX: Double
+        private let originY: Double
+
+        var origin: CGPoint { CGPoint(x: CGFloat(originX), y: CGFloat(originY)) }
+
+        init(text: String, origin: CGPoint) {
+            self.text = text
+            originX = Double(origin.x)
+            originY = Double(origin.y)
+        }
     }
 
-    let canvasSize: CGSize
+    private let canvasWidth: Double
+    private let canvasHeight: Double
     let renderedAt: Date
     let visibleIDs: Set<String>
     let shanghaiIDs: Set<String>
     let labelPositions: [String: Int]
     let icons: [Icon]
     let labels: [Label]
+
+    var canvasSize: CGSize {
+        CGSize(width: CGFloat(canvasWidth), height: CGFloat(canvasHeight))
+    }
+
+    init(canvasSize: CGSize, renderedAt: Date, visibleIDs: Set<String>,
+         shanghaiIDs: Set<String>, labelPositions: [String: Int],
+         icons: [Icon], labels: [Label]) {
+        canvasWidth = Double(canvasSize.width)
+        canvasHeight = Double(canvasSize.height)
+        self.renderedAt = renderedAt
+        self.visibleIDs = visibleIDs
+        self.shanghaiIDs = shanghaiIDs
+        self.labelPositions = labelPositions
+        self.icons = icons
+        self.labels = labels
+    }
 }
 
 struct AircraftOverlaySnapshot: Sendable {

@@ -279,8 +279,13 @@ final class AircraftServiceTests: XCTestCase {
         let data = try JSONEncoder().encode(snapshot)
         let restored = try JSONDecoder().decode(AircraftFrozenOverlay.self, from: data).snapshot
         XCTAssertEqual(restored.frozenAt, now)
+        XCTAssertEqual(restored.preparedLayout?.canvasSize, CGSize(width: 300, height: 250))
         XCTAssertEqual(restored.preparedLayout?.icons.first?.anchor, CGPoint(x: 100, y: 110))
+        XCTAssertEqual(restored.preparedLayout?.icons.first?.width, 8)
+        XCTAssertEqual(restored.preparedLayout?.icons.first?.height, 8)
+        XCTAssertEqual(restored.preparedLayout?.icons.first?.angle, 15)
         XCTAssertEqual(restored.preparedLayout?.labels.first?.text, "Flight · A320")
+        XCTAssertEqual(restored.preparedLayout?.labels.first?.origin, CGPoint(x: 110, y: 106))
         XCTAssertEqual(WidgetAircraftVisibility.visible(restored,
             at: now.addingTimeInterval(86400)).count, 1)
 
