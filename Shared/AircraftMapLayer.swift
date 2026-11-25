@@ -1,28 +1,6 @@
 import SwiftUI
 import AppKit
 
-struct AircraftMapDrawResult {
-    struct Icon {
-        let id: String
-        let symbol: String
-        let anchor: CGPoint
-        let width: CGFloat
-        let height: CGFloat
-        let angle: Double
-    }
-
-    struct Label {
-        let text: String
-        let origin: CGPoint
-    }
-
-    let visibleIDs: Set<String>
-    let shanghaiIDs: Set<String>
-    let labelPositions: [String: Int]
-    let icons: [Icon]
-    let labels: [Label]
-}
-
 enum AircraftMapLayer {
     static let fontSize: CGFloat = 8.5
     // Fixed medium gray remains visible on a white map background.
@@ -189,6 +167,11 @@ enum AircraftMapLayer {
         for (state, iconRect) in drawnIcons {
             let anchor = CGPoint(x: iconRect.midX, y: iconRect.midY)
             guard let info = metadata[state.icao24] else { continue }
+            // Legacy frozen snapshots store which labels were actually displayed.
+            // Keep hidden labels hidden when a saved rendered layout is unavailable.
+            let frozenLabelPosition = frozen && suppressOverlappingLabels
+                ? previousLabelPositions[state.icao24] : nil
+            if frozen && suppressOverlappingLabels && frozenLabelPosition == nil { continue }
             let shortLabel = [info.airline, info.model].compactMap { $0 }
                 .joined(separator: " · ")
             var variants: [String] = []
@@ -217,12 +200,12 @@ enum AircraftMapLayer {
                         width: w, height: h)
                 ]
                 // Keep the icon and text on one horizontal line.
-                let order = [0, 1]
-                guard let index = order.first(where: { available(boxes[$0]) }) else {
+                let order = frozenLabelPosition.map { [$0] } ?? [0, 1]
+                guard let index = order.first(where: { boxes.indices.contains($0) && available(boxes[$0]) }) else {
                     continue
                 }
                 let rect = boxes[index]
-                if suppressOverlappingLabels {
+                if suppressOverlappingLabels && !frozen {
                     let area = rect.width * rect.height
                     guard area.isFinite, area > 0 else { break }
                     let obscured = acceptedLabelRects.contains { previous in
@@ -252,6 +235,7 @@ enum AircraftMapLayer {
             }
         }
         return AircraftMapDrawResult(
+            canvasSize: canvas.size, renderedAt: now,
             visibleIDs: visibleIDs,
             shanghaiIDs: selection.shanghaiIDs.intersection(visibleIDs),
             labelPositions: positions, icons: icons, labels: labels)

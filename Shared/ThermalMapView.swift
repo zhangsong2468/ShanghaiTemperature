@@ -202,6 +202,7 @@ struct ThermalMapView: View {
     var preparedCanvasSize: CGSize? = nil
     let aircraft: [TrackedAircraft]
     let aircraftFrozenAt: Date?
+    let aircraftPreparedLayout: AircraftMapDrawResult?
     let aircraftMetadata: [String: AircraftMetadata]
     let aircraftBounds: AircraftBounds?
     let previousAircraftLabelPositions: [String: Int]
@@ -214,6 +215,7 @@ struct ThermalMapView: View {
          preparedCanvasSize: CGSize? = nil,
          aircraft: [TrackedAircraft] = [],
          aircraftFrozenAt: Date? = nil,
+         aircraftPreparedLayout: AircraftMapDrawResult? = nil,
          aircraftMetadata: [String: AircraftMetadata] = [:],
          aircraftBounds: AircraftBounds? = nil,
          previousAircraftLabelPositions: [String: Int] = [:],
@@ -225,6 +227,7 @@ struct ThermalMapView: View {
         self.preparedCanvasSize=preparedCanvasSize
         self.aircraft=aircraft
         self.aircraftFrozenAt=aircraftFrozenAt
+        self.aircraftPreparedLayout=aircraftPreparedLayout
         self.aircraftMetadata=aircraftMetadata
         self.aircraftBounds=aircraftBounds
         self.previousAircraftLabelPositions=previousAircraftLabelPositions
@@ -260,6 +263,22 @@ struct ThermalMapView: View {
                         width: preparedCanvasSize?.width,
                         height: preparedCanvasSize?.height)
                     .accessibilityLabel("江浙沪体感温度地图，\(snapshot.bands.count)条温度带，摄氏度。\(display.message)")
+            } else if aircraftFrozenAt != nil {
+                // Weather data may expire independently of a paused aircraft layer.
+                Canvas { context, size in
+                    let projection = geometry.map {
+                        MapProjection(bounds:$0.bounds,rect:CGRect(
+                            x:size.width*0.18,y:9,width:size.width*0.64,
+                            height:max(1,size.height-18)))
+                    }
+                    _ = drawAircraft(context:&context,size:size,projection:projection,
+                        reserved:[],renderAircraft:true)
+                }
+                .frame(width:preparedCanvasSize?.width,height:preparedCanvasSize?.height)
+                .overlay(alignment:.bottom) {
+                    Text(mapFailureMessage).font(.system(size:11))
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 VStack(spacing:8) {
                     Image(systemName:"map").font(.system(size:26,weight:.light))
@@ -327,31 +346,49 @@ struct ThermalMapView: View {
             var halo=context;halo.addFilter(.shadow(color:Color(nsColor:.windowBackgroundColor).opacity(0.9),radius:1))
             halo.draw(text,at:CGPoint(x:rect.minX,y:rect.minY),anchor:.topLeading)
         }
-        if !display.isReplay, let aircraftBounds {
-            let layout = AircraftMapLayer.layout(
-                context:context,
-                frozen:aircraftFrozenAt != nil,
-                suppressOverlappingLabels:!appPresentation,
-                canvas:CGRect(origin:.zero,size:size),
-                aircraft:aircraft,
-                metadata:aircraftMetadata,
-                reserved:occupied + aircraftLeaderObstacles,
-                previousLabelPositions:previousAircraftLabelPositions,
-                preferredIDs:preferredAircraftIDs,
-                preferredShanghaiIDs:preferredShanghaiAircraftIDs,
-                now:aircraftFrozenAt ?? display.date,
-                bounds:aircraftBounds,
-                project: { longitude,latitude in
-                    projection.point(longitude:longitude,latitude:latitude)
-                })
+        return drawAircraft(context:&context,size:size,projection:projection,
+            reserved:occupied + aircraftLeaderObstacles,renderAircraft:renderAircraft)
+    }
+
+    private func drawAircraft(context: inout GraphicsContext, size: CGSize,
+                              projection: MapProjection?, reserved: [CGRect],
+                              renderAircraft: Bool) -> AircraftMapDrawResult? {
+        guard !display.isReplay, let aircraftBounds else { return nil }
+        // Reuse the exact captured aircraft layer for the prepared frame
+        // and all frozen entries. Future live entries keep their age checks.
+        if let prepared = aircraftPreparedLayout,
+           prepared.canvasSize == size,
+           aircraftFrozenAt != nil || prepared.renderedAt == display.date {
             if renderAircraft {
                 AircraftMapLayer.render(
-                    layout, context:&context,
+                    prepared, context:&context,
                     color:appPresentation ? .white : AircraftMapLayer.aircraftColor)
             }
-            return layout
+            return prepared
         }
-        return nil
+        guard let projection else { return nil }
+        let layout = AircraftMapLayer.layout(
+            context:context,
+            frozen:aircraftFrozenAt != nil,
+            suppressOverlappingLabels:!appPresentation,
+            canvas:CGRect(origin:.zero,size:size),
+            aircraft:aircraft,
+            metadata:aircraftMetadata,
+            reserved:reserved,
+            previousLabelPositions:previousAircraftLabelPositions,
+            preferredIDs:preferredAircraftIDs,
+            preferredShanghaiIDs:preferredShanghaiAircraftIDs,
+            now:aircraftFrozenAt ?? display.date,
+            bounds:aircraftBounds,
+            project: { longitude,latitude in
+                projection.point(longitude:longitude,latitude:latitude)
+            })
+        if renderAircraft {
+            AircraftMapLayer.render(
+                layout, context:&context,
+                color:appPresentation ? .white : AircraftMapLayer.aircraftColor)
+        }
+        return layout
     }
 
     private static func aircraftLineObstacles(

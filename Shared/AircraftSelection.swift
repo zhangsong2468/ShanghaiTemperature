@@ -145,8 +145,33 @@ enum AircraftSelector {
 }
 
 
+struct AircraftMapDrawResult: Codable, Sendable {
+    struct Icon: Codable, Sendable {
+        let id: String
+        let symbol: String
+        let anchor: CGPoint
+        let width: CGFloat
+        let height: CGFloat
+        let angle: Double
+    }
+
+    struct Label: Codable, Sendable {
+        let text: String
+        let origin: CGPoint
+    }
+
+    let canvasSize: CGSize
+    let renderedAt: Date
+    let visibleIDs: Set<String>
+    let shanghaiIDs: Set<String>
+    let labelPositions: [String: Int]
+    let icons: [Icon]
+    let labels: [Label]
+}
+
 struct AircraftOverlaySnapshot: Sendable {
     var frozenAt: Date? = nil
+    var preparedLayout: AircraftMapDrawResult? = nil
     var labelPositions: [String: Int] = [:]
     let selectedIDs: Set<String>
     let shanghaiIDs: Set<String>
@@ -163,6 +188,33 @@ struct AircraftOverlaySnapshot: Sendable {
             aircraft.map { $0.state }, at: date, bounds: bounds
         ).map { $0.icao24 })
         return aircraft.filter { ids.contains($0.state.icao24) }
+    }
+}
+
+// Widget-only live position expiry. A held or paused snapshot uses the
+// selected IDs and observation time captured when its layout was prepared.
+enum WidgetAircraftVisibility {
+    static let maximumPositionAge: TimeInterval = 240
+
+    static func visible(
+        _ overlay: AircraftOverlaySnapshot?, at date: Date
+    ) -> [TrackedAircraft] {
+        guard let overlay else { return [] }
+        if overlay.frozenAt != nil { return overlay.visible(at: date) }
+        return overlay.visible(at: date).filter { item in
+            let age = date.timeIntervalSince(item.state.positionAt)
+            return age >= 0 && age < maximumPositionAge
+                && item.state.isVisible(at: date, bounds: overlay.bounds)
+        }
+    }
+
+    static func expirationDates(
+        _ overlay: AircraftOverlaySnapshot?, after date: Date
+    ) -> [Date] {
+        guard let overlay, overlay.frozenAt == nil else { return [] }
+        return overlay.aircraft.map {
+            $0.state.positionAt.addingTimeInterval(maximumPositionAge)
+        }.filter { $0 > date }
     }
 }
 
@@ -190,10 +242,17 @@ actor AircraftOverlayStore {
         latestPrepared = saved
     }
 
-    func rememberPrepared(_ overlay: AircraftOverlaySnapshot, at date: Date) {
-        guard overlay.frozenAt == nil else { return }
+    func rememberPrepared(
+        _ overlay: AircraftOverlaySnapshot, at date: Date, generation: String
+    ) -> AircraftOverlaySnapshot {
+        guard overlay.frozenAt == nil else { return overlay }
         let pause = AircraftPauseSettings.current
-        guard !pause.paused else { return }
+        // Pause can change while the widget prepares a timeline. Return the
+        // previous frozen frame instead of publishing the obsolete live one.
+        guard !pause.paused, pause.generation == generation else {
+            return frozen(bounds: overlay.bounds)
+        }
+        if let latestPrepared, latestPrepared.date > date { return overlay }
         let saved = AircraftFrozenOverlay(
             overlay: overlay, date: date, generation: pause.generation)
         latestPrepared = saved
@@ -206,9 +265,10 @@ actor AircraftOverlayStore {
         } catch {
             NSLog("Aircraft frozen snapshot save failed: %@", String(describing: error))
         }
+        return overlay
     }
 
-    private func frozen(bounds: AircraftBounds) -> AircraftOverlaySnapshot {
+    func frozen(bounds: AircraftBounds) -> AircraftOverlaySnapshot {
         restorePrepared()
         if let latestPrepared {
             return latestPrepared.snapshot
@@ -247,6 +307,7 @@ actor AircraftOverlayStore {
             var held = frozen(bounds: bounds)
             held = AircraftOverlaySnapshot(
                 frozenAt: held.frozenAt,
+                preparedLayout: held.preparedLayout,
                 labelPositions: held.labelPositions,
                 selectedIDs: held.selectedIDs, shanghaiIDs: held.shanghaiIDs,
                 aircraft: held.aircraft, metadata: held.metadata,
@@ -489,7 +550,7 @@ actor AircraftOverlayStore {
 }
 
 
-private struct AircraftFrozenOverlay: Codable {
+struct AircraftFrozenOverlay: Codable {
     struct Item: Codable {
         let state: AircraftState
         let kind: Int
@@ -502,6 +563,7 @@ private struct AircraftFrozenOverlay: Codable {
     }
     let date: Date
     let generation: String
+    let preparedLayout: AircraftMapDrawResult?
     let labelPositions: [String: Int]
     let selectedIDs: Set<String>
     let shanghaiIDs: Set<String>
@@ -513,6 +575,7 @@ private struct AircraftFrozenOverlay: Codable {
     init(overlay: AircraftOverlaySnapshot, date: Date, generation: String) {
         self.date = date
         self.generation = generation
+        preparedLayout = overlay.preparedLayout
         labelPositions = overlay.labelPositions
         selectedIDs = overlay.selectedIDs
         shanghaiIDs = overlay.shanghaiIDs
@@ -531,6 +594,7 @@ private struct AircraftFrozenOverlay: Codable {
     var snapshot: AircraftOverlaySnapshot {
         AircraftOverlaySnapshot(
             frozenAt: date,
+            preparedLayout: preparedLayout,
             labelPositions: labelPositions,
             selectedIDs: selectedIDs,
             shanghaiIDs: shanghaiIDs,

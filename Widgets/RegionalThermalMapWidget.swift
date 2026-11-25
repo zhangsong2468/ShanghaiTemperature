@@ -12,21 +12,6 @@ private final class AircraftPreparedLayoutCapture {
     var layout: AircraftMapDrawResult?
 }
 
-private enum WidgetAircraftVisibility {
-    static let maximumPositionAge: TimeInterval = 240
-
-    static func visible(
-        _ overlay: AircraftOverlaySnapshot?, at date: Date
-    ) -> [TrackedAircraft] {
-        guard let overlay else { return [] }
-        return overlay.visible(at: date).filter { item in
-            let age = date.timeIntervalSince(item.state.positionAt)
-            return age >= 0 && age < maximumPositionAge
-                && item.state.isVisible(at: date, bounds: overlay.bounds)
-        }
-    }
-}
-
 struct RegionalThermalMapProvider: TimelineProvider {
     private func replay() -> ThermalMapDisplay? {
         guard let folder=Bundle.main.url(forResource:"ThermalMap",withExtension:nil),
@@ -75,14 +60,7 @@ struct RegionalThermalMapProvider: TimelineProvider {
             if let record=update.record {
                 dates += [record.fetchedAt.addingTimeInterval(ForecastRecord.maximumCacheAge+1)]
             }
-            if let overlay {
-                // Re-evaluate at the widget-only four-minute position expiry.
-                // Preserve the original observation timestamps.
-                dates += overlay.aircraft.map { item in
-                    item.state.positionAt.addingTimeInterval(
-                        WidgetAircraftVisibility.maximumPositionAge)
-                }.filter { $0 > now }
-            }
+            dates += WidgetAircraftVisibility.expirationDates(overlay, after: now)
             let entries=Array(Set(dates.filter {$0>=now})).sorted().map { date in
                 RegionalThermalMapEntry(
                     date:date,
@@ -117,6 +95,10 @@ struct RegionalThermalMapProvider: TimelineProvider {
               canvas.width.isFinite,canvas.height.isFinite,
               canvas.width > 4,canvas.height > 4 else { return overlay }
         if overlay.frozenAt != nil { return overlay }
+        let pause = AircraftPauseSettings.current
+        if pause.paused {
+            return await AircraftOverlayStore.shared.frozen(bounds: overlay.bounds)
+        }
         let view = ThermalMapView(
             display:display,
             aircraft:WidgetAircraftVisibility.visible(
@@ -140,9 +122,14 @@ struct RegionalThermalMapProvider: TimelineProvider {
         renderer.proposedSize = ProposedViewSize(
             width:canvas.width,height:canvas.height)
         renderer.scale = 1
-        guard renderer.cgImage != nil,
-              let layout = capture.layout else { return overlay }
+        guard renderer.cgImage != nil, let layout = capture.layout else {
+            if AircraftPauseSettings.current.generation != pause.generation {
+                return await AircraftOverlayStore.shared.frozen(bounds: overlay.bounds)
+            }
+            return overlay
+        }
         overlay = AircraftOverlaySnapshot(
+            preparedLayout:layout,
             labelPositions:layout.labelPositions,
             selectedIDs:layout.visibleIDs,
             shanghaiIDs:layout.shanghaiIDs,
@@ -155,8 +142,8 @@ struct RegionalThermalMapProvider: TimelineProvider {
             shanghaiIDs:layout.shanghaiIDs,
             labelPositions:layout.labelPositions,
             preparedAt:preparedAt)
-        await AircraftOverlayStore.shared.rememberPrepared(overlay, at: preparedAt)
-        return overlay
+        return await AircraftOverlayStore.shared.rememberPrepared(
+            overlay, at: preparedAt, generation: pause.generation)
     }
 
     private func loadAircraft(size: CGSize) async -> AircraftOverlaySnapshot? {
@@ -184,7 +171,8 @@ struct RegionalThermalMapWidget: Widget {
                 preparedCanvasSize:entry.aircraftCanvasSize,
                 aircraft:WidgetAircraftVisibility.visible(
                     entry.aircraftOverlay, at:entry.date),
-                aircraftFrozenAt:nil,
+                aircraftFrozenAt:entry.aircraftOverlay?.frozenAt,
+                aircraftPreparedLayout:entry.aircraftOverlay?.preparedLayout,
                 aircraftMetadata:entry.aircraftOverlay?.metadata ?? [:],
                 aircraftBounds:entry.aircraftOverlay?.bounds,
                 previousAircraftLabelPositions:

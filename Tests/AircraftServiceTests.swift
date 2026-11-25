@@ -238,4 +238,61 @@ final class AircraftServiceTests: XCTestCase {
         XCTAssertEqual(home.standardizedFileURL.path,
             FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path)
     }
+
+    func testWidgetLiveExpiryAndFrozenVisibility() {
+        let selected = TrackedAircraft(state: state(id: 1, age: 239),
+            kind: .other, firstSeen: now)
+        let backup = TrackedAircraft(state: state(id: 2, age: 120),
+            kind: .other, firstSeen: now)
+        var overlay = AircraftOverlaySnapshot(
+            selectedIDs: [selected.state.icao24], shanghaiIDs: [],
+            aircraft: [selected, backup], metadata: [:], bounds: bounds,
+            refreshAfter: now.addingTimeInterval(600))
+
+        XCTAssertEqual(WidgetAircraftVisibility.visible(overlay, at: now).count, 2)
+        XCTAssertEqual(WidgetAircraftVisibility.visible(overlay,
+            at: now.addingTimeInterval(1)).map(\.state.icao24), [backup.state.icao24])
+        XCTAssertEqual(Set(WidgetAircraftVisibility.expirationDates(overlay, after: now)),
+            Set([now.addingTimeInterval(1), now.addingTimeInterval(120)]))
+
+        overlay.frozenAt = now
+        let later = now.addingTimeInterval(86400)
+        XCTAssertEqual(WidgetAircraftVisibility.visible(overlay, at: later)
+            .map(\.state.icao24), [selected.state.icao24])
+        XCTAssertTrue(WidgetAircraftVisibility.expirationDates(overlay, after: now).isEmpty)
+    }
+
+    func testFrozenWidgetLayoutRoundTripAndOlderCache() throws {
+        let selected = TrackedAircraft(state: state(id: 1, age: 12),
+            kind: .other, firstSeen: now)
+        let id = selected.state.icao24
+        let layout = AircraftMapDrawResult(canvasSize: CGSize(width: 300, height: 250),
+            renderedAt: now, visibleIDs: [id], shanghaiIDs: [], labelPositions: [id: 0],
+            icons: [.init(id: id, symbol: "airplane", anchor: CGPoint(x: 100, y: 110),
+                width: 8, height: 8, angle: 15)],
+            labels: [.init(text: "Flight · A320", origin: CGPoint(x: 110, y: 106))])
+        let overlay = AircraftOverlaySnapshot(preparedLayout: layout,
+            labelPositions: [id: 0], selectedIDs: [id], shanghaiIDs: [],
+            aircraft: [selected], metadata: [:], bounds: bounds,
+            refreshAfter: now.addingTimeInterval(600))
+        let snapshot = AircraftFrozenOverlay(overlay: overlay, date: now, generation: "paused")
+        let data = try JSONEncoder().encode(snapshot)
+        let restored = try JSONDecoder().decode(AircraftFrozenOverlay.self, from: data).snapshot
+        XCTAssertEqual(restored.frozenAt, now)
+        XCTAssertEqual(restored.preparedLayout?.icons.first?.anchor, CGPoint(x: 100, y: 110))
+        XCTAssertEqual(restored.preparedLayout?.labels.first?.text, "Flight · A320")
+        XCTAssertEqual(WidgetAircraftVisibility.visible(restored,
+            at: now.addingTimeInterval(86400)).count, 1)
+
+        // The 0.6.2 JSON has no preparedLayout field. Retain its frozen IDs,
+        // timestamps and label positions for the fallback renderer.
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        json.removeValue(forKey: "preparedLayout")
+        let old = try JSONDecoder().decode(AircraftFrozenOverlay.self,
+            from: JSONSerialization.data(withJSONObject: json)).snapshot
+        XCTAssertNil(old.preparedLayout)
+        XCTAssertEqual(old.labelPositions, [id: 0])
+        XCTAssertEqual(WidgetAircraftVisibility.visible(old,
+            at: now.addingTimeInterval(86400)).map(\.state.icao24), [id])
+    }
 }
