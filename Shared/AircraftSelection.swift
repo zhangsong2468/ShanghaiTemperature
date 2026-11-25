@@ -227,11 +227,13 @@ actor AircraftOverlayStore {
             "ShanghaiTemperature/AircraftTracking-v1/selection.json")
     }
 
-    func load(bounds: AircraftBounds) async -> AircraftOverlaySnapshot {
+    func load(bounds: AircraftBounds, preparedUpdate: AircraftUpdate? = nil) async -> AircraftOverlaySnapshot {
         restorePrepared()
         let started = AircraftPauseSettings.current
+        let update: AircraftUpdate
+        if let preparedUpdate { update = preparedUpdate }
+        else { update = await AircraftStore.shared.load(bounds: bounds) }
         if started.paused { return frozen(bounds: bounds) }
-        let update = await AircraftStore.shared.load(bounds: bounds)
         let initialDate = Date()
         let current = AircraftPauseSettings.current
         if current.paused || current.generation != started.generation {

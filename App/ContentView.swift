@@ -9,30 +9,43 @@ struct ContentView: View {
     @State private var expanded = false
     @State private var systemSleeping = false
     @StateObject private var mapWindow = AircraftMapWindowReference()
-    @State private var thermal: ThermalMapUpdate?
+    @State private var thermalDisplay: ThermalMapDisplay?
+    @State private var thermalFetchedAt: Date?
+    @State private var thermalRenderID = UUID()
+    @State private var thermalImage: CGImage?
+    @State private var lastPreparedBatchID: UUID?
+    @State private var requestStatus: AircraftRequestStatus?
     @State private var loadingThermal = false
     @State private var loadingAircraft = false
     @State private var nextThermal = Date.distantPast
     @State private var nextAircraft = Date.distantPast
-    @State private var useLocalThermal = ThermalSourceSettings.current == .local
-    @State private var pauseAircraft = AircraftPauseSettings.current.paused
+    @State private var useLocalThermal = false
+    @State private var pauseAircraft = false
+    @State private var settingsReady = false
+    @State private var savingSetting = false
     @State private var settingError: String?
 
-    private let mapSize = CGSize(width: 250, height: 288)
+    private let mapSize = AircraftBounds.appCanvas
 
-    private var display: ThermalMapDisplay {
-        thermal?.projected(at: Date()) ?? ThermalMapDisplay(
-            snapshot: nil, date: Date(),
-            message: "等待地图数据更新", isReplay: false)
+    private var thermalMap: some View {
+        Group {
+            if let thermalImage {
+                Image(decorative: thermalImage, scale: mapWindow.backingScale)
+                    .resizable()
+                    .interpolation(.high)
+                    .accessibilityLabel("江浙沪体感温度地图")
+            } else {
+                Text(thermalDisplay?.message ?? "等待地图数据更新")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 276, height: 314)
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ThermalMapView(
-                display: display,
-                appPresentation: true,
-                preparedCanvasSize: mapSize)
-                .frame(width: 276, height: 314)
+            thermalMap
                 .overlay {
                     AircraftPlaybackImage(model: playback)
                         .frame(width: mapSize.width, height: mapSize.height)
@@ -51,25 +64,35 @@ struct ContentView: View {
         .environment(\.colorScheme, .light)
         .background(AircraftMapWindowReader(reference: mapWindow))
         .task {
-            playback.presentationActive = mapWindow.presentable && !systemSleeping
-            await playback.refreshHistory()
+            let settings = await AircraftSettingsIO.shared.settings()
+            useLocalThermal = settings.0 == .local
+            pauseAircraft = settings.1
+            settingsReady = true
+        }
+        .task(id: "\(thermalRenderID)-\(mapWindow.backingScale)") {
+            await renderThermalMap()
+        }
+        .task(id: expanded) {
+            guard expanded else { return }
             while !Task.isCancelled {
+                requestStatus = await AircraftStore.shared.requestStatus()
                 do { try await Task.sleep(nanoseconds: 30_000_000_000) }
                 catch { break }
-                if playback.presentationActive {
-                    await playback.refreshHistory()
-                }
             }
         }
-        .task(id: "\(useLocalThermal)-\(systemSleeping)") {
-            guard !systemSleeping else { return }
+        .task {
+            playback.presentationActive = mapWindow.presentable && !systemSleeping
+            await playback.refreshHistory()
+        }
+        .task(id: "\(useLocalThermal)-\(systemSleeping)-\(settingsReady)") {
+            guard !systemSleeping, settingsReady else { return }
             while !Task.isCancelled {
                 await refreshThermalIfNeeded()
                 guard await waitForRefresh(until: nextThermal) else { break }
             }
         }
-        .task(id: "\(pauseAircraft)-\(systemSleeping)") {
-            guard !systemSleeping, !pauseAircraft else { return }
+        .task(id: "\(pauseAircraft)-\(systemSleeping)-\(settingsReady)") {
+            guard !systemSleeping, settingsReady else { return }
             while !Task.isCancelled {
                 await refreshAircraftIfNeeded()
                 guard await waitForRefresh(until: nextAircraft) else { break }
@@ -121,58 +144,62 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
             }
 
-            TimelineView(.periodic(from: .now, by: 30)) { _ in
-                VStack(alignment: .leading, spacing: 5) {
-                    if !pauseAircraft {
-                        HStack {
-                            Text("航班信息")
-                            Spacer()
-                            Text(AircraftRequestStatus.current?.intervalText
-                                 ?? "10 min（600 s）")
-                        }
+            VStack(alignment: .leading, spacing: 5) {
+                if !pauseAircraft {
+                    HStack {
+                        Text("航班信息")
+                        Spacer()
+                        Text(requestStatus?.intervalText ?? "10 min（600 s）")
                     }
-                    Text("下次允许查询：" +
-                         (AircraftRequestStatus.current?.nextRequestText
-                          ?? "等待首次请求"))
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .foregroundStyle(.secondary)
+                Text("下次允许查询：" + (requestStatus?.nextRequestText ?? "读取共享状态"))
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .foregroundStyle(.secondary)
 
             Toggle("暂停飞机更新", isOn: Binding(
                 get: { pauseAircraft },
                 set: { paused in
-                    do {
-                        try AircraftPauseSettings.save(paused: paused)
-                        pauseAircraft = paused
-                        settingError = nil
-                        nextAircraft = .distantPast
-                        WidgetCenter.shared.reloadTimelines(
-                            ofKind: "ShanghaiTemperature.RegionalThermalMap")
-                    } catch {
-                        settingError = "飞机更新设置未保存，请稍后重试。"
+                    Task {
+                        savingSetting = true
+                        defer { savingSetting = false }
+                        do {
+                            try await AircraftSettingsIO.shared.savePause(paused)
+                            pauseAircraft = paused
+                            settingError = nil
+                            nextAircraft = .distantPast
+                            WidgetCenter.shared.reloadTimelines(
+                                ofKind: "ShanghaiTemperature.RegionalThermalMap")
+                        } catch {
+                            settingError = "飞机更新设置未保存，请稍后重试。"
+                        }
                     }
                 }))
                 .toggleStyle(.switch)
                 .controlSize(.mini)
+                .disabled(!settingsReady || savingSetting)
 
             Toggle("本地计算地图体感", isOn: Binding(
                 get: { useLocalThermal },
                 set: { enabled in
-                    do {
-                        try ThermalSourceSettings.save(
-                            enabled ? .local : .network)
-                        useLocalThermal = enabled
-                        settingError = nil
-                        nextThermal = .distantPast
-                        WidgetCenter.shared.reloadTimelines(
-                            ofKind: "ShanghaiTemperature.RegionalThermalMap")
-                    } catch {
-                        settingError = "体感设置未保存，请稍后重试。"
+                    Task {
+                        savingSetting = true
+                        defer { savingSetting = false }
+                        do {
+                            try await AircraftSettingsIO.shared.saveThermal(enabled ? .local : .network)
+                            useLocalThermal = enabled
+                            settingError = nil
+                            nextThermal = .distantPast
+                            WidgetCenter.shared.reloadTimelines(
+                                ofKind: "ShanghaiTemperature.RegionalThermalMap")
+                        } catch {
+                            settingError = "体感设置未保存，请稍后重试。"
+                        }
                     }
                 }))
                 .toggleStyle(.switch)
                 .controlSize(.mini)
+                .disabled(!settingsReady || savingSetting)
 
             if let settingError {
                 Text(settingError).foregroundStyle(.secondary)
@@ -194,7 +221,16 @@ struct ContentView: View {
         defer { loadingThermal = false }
         let result = await RegionalThermalStore.shared.load()
         guard !Task.isCancelled else { return }
-        thermal = result
+        let display = result.projected(at: Date())
+        let fetchedAt = result.record?.fetchedAt
+        if thermalDisplay == nil || thermalFetchedAt != fetchedAt
+            || thermalDisplay?.snapshot?.source != display.snapshot?.source
+            || thermalDisplay?.snapshot?.date != display.snapshot?.date
+            || (display.snapshot == nil && thermalDisplay?.message != display.message) {
+            thermalDisplay = display
+            thermalFetchedAt = fetchedAt
+            thermalRenderID = UUID()
+        }
         nextThermal = max(Date().addingTimeInterval(30), result.refreshAfter)
     }
 
@@ -202,14 +238,21 @@ struct ContentView: View {
     private func refreshAircraftIfNeeded() async {
         guard !loadingAircraft,
               !systemSleeping,
-              !AircraftPauseSettings.current.paused,
               Date() >= nextAircraft,
-              let bounds = aircraftBounds() else { return }
+              let bounds = AircraftBounds.viewport(canvas: mapSize) else { return }
         loadingAircraft = true
         defer { loadingAircraft = false }
-        let result = await AircraftOverlayStore.shared.load(bounds: bounds)
+        let result = await AircraftStore.shared.load(bounds: bounds)
         guard !Task.isCancelled else { return }
-        nextAircraft = max(Date().addingTimeInterval(30), result.refreshAfter)
+        // A new batch can be published by WidgetKit while the app is idle.
+        // Poll the shared state every 30 seconds without waiting for HTTP eligibility.
+        nextAircraft = Date().addingTimeInterval(30)
+        if !pauseAircraft, let id = result.record?.batchID, id != lastPreparedBatchID {
+            _ = await AircraftOverlayStore.shared.load(bounds: bounds, preparedUpdate: result)
+            guard !Task.isCancelled else { return }
+            lastPreparedBatchID = id
+        }
+        if expanded { requestStatus = await AircraftStore.shared.requestStatus() }
         await playback.refreshHistory()
     }
 
@@ -223,39 +266,26 @@ struct ContentView: View {
         }
     }
 
-    // Match the Canvas and projection used by ThermalMapView exactly.
-    private func aircraftBounds() -> AircraftBounds? {
-        guard let geometry = try? ThermalMapGeometry.bundled(),
-              geometry.bounds.count == 4 else { return nil }
-        let b = geometry.bounds
-        guard b.allSatisfy(\.isFinite),
-              b[0] < b[2], b[1] < b[3],
-              b[1] > -85, b[3] < 85 else { return nil }
-
-        func mercator(_ latitude: Double) -> Double {
-            log(tan(.pi / 4 + latitude * .pi / 360))
+    @MainActor
+    private func renderThermalMap() async {
+        guard let display = thermalDisplay else { return }
+        let scale = mapWindow.backingScale
+        let prepared = await Task.detached(priority: .userInitiated) {
+            ThermalMapPrepared.prepare(display)
+        }.value
+        guard !Task.isCancelled else { return }
+        let view = ThermalMapView(display: display, appPresentation: true,
+            preparedCanvasSize: mapSize, prepared: prepared)
+            .frame(width: 276, height: 314)
+            .environment(\.colorScheme, .light)
+        let renderer = ImageRenderer(content: view)
+        renderer.proposedSize = ProposedViewSize(width: 276, height: 314)
+        renderer.scale = scale
+        if let image = renderer.cgImage {
+            thermalImage = image
         }
-        func latitude(_ value: Double) -> Double {
-            (2 * atan(exp(value)) - .pi / 2) * 180 / .pi
-        }
-        let west = b[0] * .pi / 180
-        let east = b[2] * .pi / 180
-        let south = mercator(b[1])
-        let north = mercator(b[3])
-        let width = Double(mapSize.width)
-        let height = Double(mapSize.height)
-        let scale = min(width * 0.64 / (east - west),
-                        (height - 18) / (north - south))
-        guard scale.isFinite, scale > 0 else { return nil }
-        let x = (west + east) / 2
-        let y = (south + north) / 2
-        let bounds = AircraftBounds(
-            west: max(-180, (x - width / (2 * scale)) * 180 / .pi),
-            south: max(-85, latitude(y - height / (2 * scale))),
-            east: min(180, (x + width / (2 * scale)) * 180 / .pi),
-            north: min(85, latitude(y + height / (2 * scale))))
-        return bounds.isValid ? bounds : nil
     }
+
 }
 
 
@@ -314,6 +344,7 @@ private struct AircraftPlaybackControls: View {
 private final class AircraftMapWindowReference: ObservableObject {
     weak var window: NSWindow?
     @Published private(set) var presentable = false
+    @Published private(set) var backingScale: CGFloat = 2
     private var subscriptions = Set<AnyCancellable>()
 
     func attach(_ next: NSWindow?) {
@@ -330,7 +361,8 @@ private final class AircraftMapWindowReference: ObservableObject {
         let center = NotificationCenter.default
         for name in [NSWindow.didChangeOcclusionStateNotification,
                      NSWindow.didMiniaturizeNotification,
-                     NSWindow.didDeminiaturizeNotification] {
+                     NSWindow.didDeminiaturizeNotification,
+                     NSWindow.didChangeBackingPropertiesNotification] {
             center.publisher(for: name, object: next)
                 .sink { [weak self] _ in
                     Task { @MainActor [weak self] in
@@ -360,6 +392,9 @@ private final class AircraftMapWindowReference: ObservableObject {
     }
 
     func refreshVisibility() {
+        if let scale = window?.backingScaleFactor, scale != backingScale {
+            backingScale = scale
+        }
         setPresentable(!NSApplication.shared.isHidden
             && window?.isVisible == true
             && window?.isMiniaturized == false

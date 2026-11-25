@@ -8,7 +8,14 @@ struct ThermalMapGeometry: Decodable, Sendable {
     let bounds: [Double] // west, south, east, north; WGS84
     let labels: [Label]
 
+    private static let mainGeometry = Result { try load(in: .main) }
+
     static func bundled(in bundle: Bundle = .main) throws -> ThermalMapGeometry {
+        if bundle.bundleURL == Bundle.main.bundleURL { return try mainGeometry.get() }
+        return try load(in: bundle)
+    }
+
+    private static func load(in bundle: Bundle) throws -> ThermalMapGeometry {
         guard let folder = bundle.url(forResource: "ThermalMap", withExtension: nil) else {
             throw CocoaError(.fileNoSuchFile)
         }

@@ -14,6 +14,38 @@ struct AircraftBounds: Codable, Equatable, Sendable {
             && south >= -85 && north <= 85 && south < north
     }
 
+    // A fixed acquisition region covers the App and standard large widget.
+    static let acquisition = AircraftBounds(west: 110, south: 26, east: 129, north: 36)
+
+    static let appCanvas = CGSize(width: 250, height: 288)
+
+    static func viewport(canvas: CGSize) -> AircraftBounds? {
+        guard let geometry = try? ThermalMapGeometry.bundled(),
+              canvas.width.isFinite, canvas.height.isFinite,
+              canvas.width > 0, canvas.height > 18 else { return nil }
+        let b = geometry.bounds
+        guard b.count == 4, b.allSatisfy(\.isFinite),
+              b[0] < b[2], b[1] < b[3], b[1] > -85, b[3] < 85 else { return nil }
+        func mercator(_ latitude: Double) -> Double {
+            log(tan(.pi / 4 + latitude * .pi / 360))
+        }
+        func latitude(_ value: Double) -> Double {
+            (2 * atan(exp(value)) - .pi / 2) * 180 / .pi
+        }
+        let west = b[0] * .pi / 180, east = b[2] * .pi / 180
+        let south = mercator(b[1]), north = mercator(b[3])
+        let width = Double(canvas.width), height = Double(canvas.height)
+        let scale = min(width * 0.64 / (east - west), (height - 18) / (north - south))
+        guard scale.isFinite, scale > 0 else { return nil }
+        let x = (west + east) / 2, y = (south + north) / 2
+        let result = AircraftBounds(
+            west: max(-180, (x - width / (2 * scale)) * 180 / .pi),
+            south: max(-85, latitude(y - height / (2 * scale))),
+            east: min(180, (x + width / (2 * scale)) * 180 / .pi),
+            north: min(85, latitude(y + height / (2 * scale))))
+        return result.isValid ? result : nil
+    }
+
     func contains(longitude: Double, latitude: Double) -> Bool {
         longitude >= west && longitude <= east && latitude >= south && latitude <= north
     }
@@ -59,6 +91,13 @@ struct AircraftRecord: Codable, Sendable {
     let bounds: AircraftBounds
     let fetchedAt: Date
     let states: [AircraftState]
+    var batchID: UUID? = nil
+
+    func scoped(to bounds: AircraftBounds, at date: Date) -> AircraftRecord {
+        AircraftRecord(schema: schema, bounds: bounds, fetchedAt: fetchedAt,
+            states: AircraftDisplayPolicy.choose(states, at: date, bounds: bounds),
+            batchID: batchID)
+    }
 
     func visible(at now: Date) -> [AircraftState] {
         guard schema == 1, bounds.isValid, now >= fetchedAt else { return [] }
@@ -143,28 +182,183 @@ enum AircraftDecoder {
     }
 }
 
+// All participants coordinate the same stable directory. The accessor covers
+// only local reads and atomic writes; no HTTP request runs inside it.
+struct AircraftSharedState: Codable, Sendable {
+    struct Batch: Codable, Sendable {
+        let id: UUID
+        let fetchedAt: Date
+    }
+
+    var schema = 1
+    var nextAllowedAt = Date.distantPast
+    var latestRequestID: UUID?
+    var batches: [Batch] = []
+    var migratedRoles: Set<String> = []
+    var remainingCredits: Int?
+}
+
+struct AircraftSharedFiles: Sendable {
+    static let path = "Library/Application Support/ShanghaiTemperature-Aircraft-v2"
+    static let retention: TimeInterval = 8 * 86400
+    static var role: String {
+        Bundle.main.bundleIdentifier == "com.songa.ShanghaiTemperature.Widgets" ? "widget" : "app"
+    }
+    let directory: URL?
+
+    init(directory: URL? = nil) {
+        // The sandbox's applicationSupportDirectory differs in both processes.
+        // Resolve the real user home; the entitlement grants this one directory.
+        if let directory {
+            self.directory = directory
+        } else if let home = NSHomeDirectoryForUser(NSUserName()) {
+            self.directory = URL(fileURLWithPath: home, isDirectory: true)
+                .appendingPathComponent(Self.path, isDirectory: true)
+        } else {
+            self.directory = nil
+        }
+    }
+
+    private func stateURL(_ root: URL) -> URL {
+        root.appendingPathComponent("request-state.json")
+    }
+
+    static func readIfPresent<T: Decodable>(_ type: T.Type, at url: URL) throws -> T? {
+        do {
+            return try JSONDecoder().decode(type, from: Data(contentsOf: url))
+        } catch let error as NSError where error.domain == NSCocoaErrorDomain
+            && (error.code == NSFileReadNoSuchFileError || error.code == NSFileNoSuchFileError) {
+            return nil
+        }
+    }
+
+    private func coordinated<T>(_ body: (URL) throws -> T) throws -> T {
+        guard let directory else { throw CocoaError(.fileNoSuchFile) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var error: NSError?
+        var result: Result<T, Error>?
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: directory, options: [], error: &error) { url in
+            result = Result { try body(url) }
+        }
+        if let error { throw error }
+        guard let result else { throw CocoaError(.fileWriteUnknown) }
+        return try result.get()
+    }
+
+    private func readState(_ root: URL) throws -> AircraftSharedState {
+        let state = try Self.readIfPresent(AircraftSharedState.self, at: stateURL(root))
+            ?? AircraftSharedState()
+        guard state.schema == 1, state.nextAllowedAt.timeIntervalSinceReferenceDate.isFinite,
+              state.batches.allSatisfy({ $0.fetchedAt.timeIntervalSinceReferenceDate.isFinite }),
+              Set(state.batches.map(\.id)).count == state.batches.count else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return state
+    }
+
+    private func writeState(_ state: AircraftSharedState, at root: URL) throws {
+        try JSONEncoder().encode(state).write(to: stateURL(root), options: .atomic)
+    }
+
+    func snapshot() throws -> AircraftSharedState {
+        try coordinated { try readState($0) }
+    }
+
+    func claim(role: String, legacyDeadline: () throws -> Date,
+               interval: TimeInterval, floor: Date, paused: Bool,
+               now: Date? = nil) throws -> (AircraftSharedState, UUID?) {
+        try coordinated { root in
+            var state = try readState(root)
+            var changed = false
+            if !state.migratedRoles.contains(role) {
+                state.nextAllowedAt = max(state.nextAllowedAt, try legacyDeadline())
+                state.migratedRoles.insert(role)
+                changed = true
+            }
+            if floor > state.nextAllowedAt {
+                state.nextAllowedAt = floor
+                changed = true
+            }
+            let claimTime = now ?? Date()
+            var id: UUID? = nil
+            // Both legacy containers must be migrated before a network request.
+            if !paused, state.migratedRoles.isSuperset(of: ["app", "widget"]),
+               claimTime >= state.nextAllowedAt {
+                guard interval.isFinite, interval >= 600 else { throw CocoaError(.fileWriteUnknown) }
+                id = UUID()
+                state.latestRequestID = id
+                state.nextAllowedAt = claimTime.addingTimeInterval(interval)
+                changed = true
+            }
+            if changed { try writeState(state, at: root) }
+            return (state, id)
+        }
+    }
+
+    func applyResponse(id: UUID, deadline: Date, credits: Int?) throws -> AircraftSharedState {
+        try coordinated { root in
+            var state = try readState(root)
+            state.nextAllowedAt = max(state.nextAllowedAt, deadline)
+            if state.latestRequestID == id { state.remainingCredits = credits }
+            try writeState(state, at: root)
+            return state
+        }
+    }
+
+    func publish(_ record: AircraftRecord, id: UUID) throws -> AircraftSharedState {
+        try coordinated { root in
+            var state = try readState(root)
+            guard state.latestRequestID == id, record.batchID == id else { return state }
+            // The immutable batch is written first; it is visible only after the
+            // state manifest is replaced. Retries with this ID are idempotent.
+            if state.batches.contains(where: { $0.id == id }) { return state }
+            try JSONEncoder().encode(record).write(
+                to: root.appendingPathComponent("aircraft-\(id.uuidString).json"), options: .atomic)
+            let cutoff = record.fetchedAt.addingTimeInterval(-Self.retention)
+            let expired = state.batches.filter { $0.fetchedAt < cutoff }
+            state.batches.removeAll { $0.fetchedAt < cutoff }
+            state.batches.append(.init(id: id, fetchedAt: record.fetchedAt))
+            try writeState(state, at: root)
+            for batch in expired {
+                try? FileManager.default.removeItem(
+                    at: root.appendingPathComponent("aircraft-\(batch.id.uuidString).json"))
+                for role in ["app", "widget"] {
+                    try? FileManager.default.removeItem(
+                        at: root.appendingPathComponent("presentation-\(batch.id.uuidString)-\(role).json"))
+                }
+            }
+            return state
+        }
+    }
+
+    func record(for batch: AircraftSharedState.Batch) throws -> AircraftRecord? {
+        guard let directory else { return nil }
+        guard let record = try Self.readIfPresent(AircraftRecord.self,
+            at: directory.appendingPathComponent("aircraft-\(batch.id.uuidString).json")),
+            record.schema == 1, record.batchID == batch.id,
+            record.fetchedAt == batch.fetchedAt, record.bounds == .acquisition else { return nil }
+        return record
+    }
+
+    func presentationURL(_ id: UUID, role: String) -> URL? {
+        directory?.appendingPathComponent("presentation-\(id.uuidString)-\(role).json")
+    }
+}
+
 actor AircraftStore {
     static let shared = AircraftStore()
-    private let directory: URL
+    private let legacyDirectory: URL
+    private let files: AircraftSharedFiles
     private let session: URLSession
     private let refreshInterval: TimeInterval
     private var record: AircraftRecord?
-    private var nextRequest: Date = .distantPast
-    private var remainingCredits: Int?
-    private let logger = Logger(
-        subsystem: "com.songa.ShanghaiTemperature",
-        category: "OpenSky"
-    )
-
-    private var currentInterval: TimeInterval {
-        refreshInterval
-    }
+    private var floor: Date = .distantPast
     private var inFlight: Task<AircraftUpdate, Never>?
-    private var inFlightBounds: AircraftBounds?
-
+    private let logger = Logger(subsystem: "com.songa.ShanghaiTemperature", category: "OpenSky")
     init(directory: URL? = nil, session: URLSession? = nil, refreshInterval: TimeInterval = 600) {
-        self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory,
-            in: .userDomainMask)[0].appendingPathComponent("ShanghaiTemperature/Aircraft-v1", isDirectory: true)
+        legacyDirectory = FileManager.default.urls(for: .applicationSupportDirectory,
+            in: .userDomainMask)[0].appendingPathComponent("ShanghaiTemperature/Aircraft-v1")
+        files = AircraftSharedFiles(directory: directory)
         self.refreshInterval = refreshInterval.isFinite ? max(600, refreshInterval) : 600
         if let session { self.session = session }
         else {
@@ -177,136 +371,107 @@ actor AircraftStore {
         }
     }
 
-    private var file: URL { directory.appendingPathComponent("positions.json") }
-    private var throttleFile: URL { directory.appendingPathComponent("next-request.json") }
-
     func load(bounds: AircraftBounds) async -> AircraftUpdate {
-        if let task = inFlight {
-            let requestedBounds = inFlightBounds
-            let result = await task.value
-            if requestedBounds == bounds {
-                // Share failures and empty responses as well as successful ones.
-                return result
-            }
-            // Another geographic request is still subject to the same throttle.
-            return update(bounds: bounds, now: Date())
+        guard bounds.isValid else {
+            return AircraftUpdate(record: nil, refreshAfter: Date().addingTimeInterval(60), remainingCredits: nil)
         }
-        let task = Task { await self.fetch(bounds: bounds) }
-        inFlightBounds = bounds
-        inFlight = task
-        let result = await task.value
-        inFlight = nil
-        inFlightBounds = nil
-        return result
+        let result: AircraftUpdate
+        if let inFlight {
+            result = await inFlight.value
+        } else {
+            let task = Task { await self.fetch() }
+            inFlight = task
+            result = await task.value
+            inFlight = nil
+        }
+        let now = Date()
+        let scoped = result.record.flatMap { record in
+            record.fetchedAt <= now ? record.scoped(to: bounds, at: now) : nil
+        }
+        return AircraftUpdate(record: scoped,
+            refreshAfter: result.refreshAfter, remainingCredits: result.remainingCredits)
     }
 
-    private func fetch(bounds: AircraftBounds) async -> AircraftUpdate {
-        let now = Date()
-        guard bounds.isValid else {
-            return AircraftUpdate(record: nil, refreshAfter: now.addingTimeInterval(300), remainingCredits: nil)
-        }
-        if record == nil, let data = try? Data(contentsOf: file),
-           let saved = try? JSONDecoder().decode(AircraftRecord.self, from: data),
+    func requestStatus() -> AircraftRequestStatus? {
+        guard let state = try? files.snapshot() else { return nil }
+        return AircraftRequestStatus(interval: refreshInterval,
+            nextRequest: max(state.nextAllowedAt, floor), updatedAt: Date(),
+            migrationPending: !state.migratedRoles.isSuperset(of: ["app", "widget"]))
+    }
+
+    private func legacyDeadline() throws -> Date {
+        let own = try AircraftSharedFiles.readIfPresent(Date.self,
+            at: legacyDirectory.appendingPathComponent("next-request.json")) ?? .distantPast
+        return max(own, try AircraftRequestStatus.legacyDeadline())
+    }
+
+    private func fetch() async -> AircraftUpdate {
+        if record == nil,
+           let saved = try? AircraftSharedFiles.readIfPresent(AircraftRecord.self,
+               at: legacyDirectory.appendingPathComponent("positions.json")),
            saved.schema == 1, saved.bounds.isValid {
             record = saved
         }
-        if let data = try? Data(contentsOf: throttleFile),
-           let saved = try? JSONDecoder().decode(Date.self, from: data) {
-            nextRequest = max(nextRequest, saved)
-        }
-        if nextRequest > now {
-            persistThrottle()
-            return update(bounds: bounds, now: now)
-        }
-        guard !AircraftPauseSettings.current.paused else {
-            return update(bounds: bounds, now: now)
-        }
-        nextRequest = now.addingTimeInterval(currentInterval)
-        guard persistThrottle() else {
-            logger.error("Request blocked: cannot persist throttle")
-            return update(bounds: bounds, now: now)
-        }
-        let requestID = UUID().uuidString
+        let pause = AircraftPauseSettings.current
+        let claim: (AircraftSharedState, UUID?)
         do {
-            var request = URLRequest(url: try AircraftDecoder.url(bounds: bounds))
-            request.timeoutInterval = 8
-            logger.notice("Request start id=\(requestID, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier) bounds=\(bounds.west),\(bounds.south),\(bounds.east),\(bounds.north)")
-            let generation = AircraftPauseSettings.current.generation
-            let (data, response) = try await AircraftPauseSettings.data(
-                for: request, session: session)
-            let receivedAt = Date()
-            guard let http = response as? HTTPURLResponse else {
-                throw AircraftServiceError.invalidResponse
-            }
-            remainingCredits = http.value(forHTTPHeaderField: "X-Rate-Limit-Remaining").flatMap(Int.init)
-            var delay = currentInterval
-            if let value = http.value(forHTTPHeaderField: "Retry-After") {
-                if let seconds = Double(value), seconds.isFinite, seconds >= 0 {
-                    delay = max(delay, seconds)
-                } else {
-                    let formatter = DateFormatter()
-                    formatter.locale = Locale(identifier: "en_US_POSIX")
-                    formatter.timeZone = TimeZone(secondsFromGMT: 0)
-                    formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
-                    if let date = formatter.date(from: value) {
-                        delay = max(delay, date.timeIntervalSince(receivedAt))
+            claim = try files.claim(role: AircraftSharedFiles.role, legacyDeadline: legacyDeadline,
+                interval: refreshInterval, floor: floor, paused: pause.paused)
+        } catch {
+            logger.error("Shared request state unavailable: \(String(describing: error), privacy: .public)")
+            return AircraftUpdate(record: record, refreshAfter: Date().addingTimeInterval(60), remainingCredits: nil)
+        }
+        var state = claim.0
+        if let id = claim.1, Date() < state.nextAllowedAt {
+            do {
+                var request = URLRequest(url: try AircraftDecoder.url(bounds: .acquisition))
+                request.timeoutInterval = 8
+                logger.notice("Request start id=\(id.uuidString, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier)")
+                let (data, response) = try await AircraftPauseSettings.data(for: request, session: session)
+                let receivedAt = Date()
+                guard let http = response as? HTTPURLResponse else { throw AircraftServiceError.invalidResponse }
+                let credits = http.value(forHTTPHeaderField: "X-Rate-Limit-Remaining").flatMap(Int.init)
+                var delay = refreshInterval
+                if let value = http.value(forHTTPHeaderField: "Retry-After") {
+                    if let seconds = Double(value), seconds.isFinite, seconds >= 0 {
+                        delay = max(delay, seconds)
+                    } else {
+                        let formatter = DateFormatter()
+                        formatter.locale = Locale(identifier: "en_US_POSIX")
+                        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+                        if let date = formatter.date(from: value) {
+                            delay = max(delay, date.timeIntervalSince(receivedAt))
+                        }
                     }
                 }
+                if let value = http.value(forHTTPHeaderField: "X-Rate-Limit-Retry-After-Seconds"),
+                   let seconds = Double(value), seconds.isFinite, seconds >= 0 {
+                    delay = max(delay, seconds)
+                }
+                floor = max(floor, receivedAt.addingTimeInterval(delay))
+                state = try files.applyResponse(id: id, deadline: floor, credits: credits)
+                logger.notice("Response id=\(id.uuidString, privacy: .public) status=\(http.statusCode) waitSeconds=\(delay)")
+                guard http.statusCode == 200, data.count <= 5_000_000 else {
+                    throw AircraftServiceError.invalidResponse
+                }
+                let current = AircraftPauseSettings.current
+                if !current.paused, current.generation == pause.generation {
+                    var saved = try AircraftDecoder.decode(data, bounds: .acquisition, now: receivedAt)
+                    saved.batchID = id
+                    state = try files.publish(saved, id: id)
+                }
+            } catch {
+                logger.error("Request failed id=\(id.uuidString, privacy: .public) error=\(String(describing: error), privacy: .public)")
             }
-            if let value = http.value(forHTTPHeaderField: "X-Rate-Limit-Retry-After-Seconds"),
-               let seconds = Double(value), seconds.isFinite, seconds >= 0 {
-                delay = max(delay, seconds)
-            }
-            nextRequest = receivedAt.addingTimeInterval(delay)
-            persistThrottle()
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After") ?? "-"
-            let retrySeconds = http.value(forHTTPHeaderField: "X-Rate-Limit-Retry-After-Seconds") ?? "-"
-            let credits = remainingCredits.map { String($0) } ?? "-"
-            let next = ISO8601DateFormatter().string(from: nextRequest)
-            logger.notice("Response id=\(requestID, privacy: .public) status=\(http.statusCode) bytes=\(data.count) credits=\(credits, privacy: .public) retryAfter=\(retryAfter, privacy: .public) retrySeconds=\(retrySeconds, privacy: .public) waitSeconds=\(delay) next=\(next, privacy: .public)")
-            guard http.statusCode == 200, data.count <= 5_000_000 else {
-                throw AircraftServiceError.invalidResponse
-            }
-            let pause = AircraftPauseSettings.current
-            guard !pause.paused, pause.generation == generation else {
-                return update(bounds: bounds, now: Date())
-            }
-            let saved = try AircraftDecoder.decode(data, bounds: bounds, now: receivedAt)
-            record = saved
-            logger.notice("Decoded id=\(requestID, privacy: .public) aircraft=\(saved.states.count)")
-            try? JSONEncoder().encode(saved).write(to: file, options: .atomic)
-            await AircraftHistoryStore.shared.append(saved)
-        } catch {
-            logger.error("Request failed id=\(requestID, privacy: .public) error=\(String(describing: error), privacy: .public)")
         }
-        return update(bounds: bounds, now: Date())
-    }
-
-    private func update(bounds: AircraftBounds, now: Date) -> AircraftUpdate {
-        let visible = record.flatMap { saved -> AircraftRecord? in
-            guard saved.bounds == bounds, saved.fetchedAt <= now else { return nil }
-            return AircraftRecord(schema: 1, bounds: bounds, fetchedAt: saved.fetchedAt,
-                states: saved.visible(at: now))
+        // Reload the published ID on every check, even if the other process won.
+        if let latest = state.batches.last, latest.id != record?.batchID {
+            if let saved = try? files.record(for: latest) { record = saved }
         }
-        return AircraftUpdate(
-            record: visible,
-            refreshAfter: nextRequest,
-            remainingCredits: remainingCredits)
-    }
-
-    @discardableResult
-    private func persistThrottle() -> Bool {
-        do {
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            try JSONEncoder().encode(nextRequest).write(
-                to: throttleFile, options: .atomic)
-            AircraftRequestStatus.publish(
-                interval: currentInterval, nextRequest: nextRequest)
-            return true
-        } catch {
-            logger.error("Throttle save failed: \(String(describing: error), privacy: .public)")
-            return false
-        }
+        let retry = state.migratedRoles.isSuperset(of: ["app", "widget"])
+            ? max(state.nextAllowedAt, floor)
+            : max(Date().addingTimeInterval(60), state.nextAllowedAt)
+        return AircraftUpdate(record: record, refreshAfter: retry, remainingCredits: state.remainingCredits)
     }
 }

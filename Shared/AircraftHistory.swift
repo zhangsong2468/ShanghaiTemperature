@@ -2,9 +2,8 @@ import Foundation
 import CoreFoundation
 import OSLog
 
-// Immutable observation records shared through the existing dedicated
-// preferences domain. Each response owns a separate key, so writers do not
-// overwrite a shared read-modify-write history array.
+// New observations live in immutable shared batch files. Old preference keys
+// remain readable until their normal retention deadline.
 actor AircraftHistoryStore {
     static let shared = AircraftHistoryStore()
     static let retention: TimeInterval = 8 * 86400
@@ -14,6 +13,9 @@ actor AircraftHistoryStore {
         subsystem: "com.songa.ShanghaiTemperature",
         category: "AircraftHistory")
     private var lastPruned: Date = .distantPast
+    private let files = AircraftSharedFiles()
+    private var legacyRecords: [String: AircraftRecord] = [:]
+    private var sharedRecords: [UUID: AircraftRecord] = [:]
 
     private var domain: CFString {
         ThermalSourceSettings.domain as CFString
@@ -38,37 +40,6 @@ actor AircraftHistoryStore {
         return Date(timeIntervalSince1970: seconds)
     }
 
-    private func key(for date: Date) -> String {
-        Self.prefix + String(date.timeIntervalSince1970)
-    }
-
-    // Call only for a newly decoded successful HTTP response.
-    func append(_ record: AircraftRecord) {
-        let now = Date()
-        guard record.schema == 1, record.bounds.isValid,
-              record.fetchedAt <= now,
-              now.timeIntervalSince(record.fetchedAt) < Self.retention else {
-            return
-        }
-        do {
-            let data = try JSONEncoder().encode(record)
-            guard let text = String(data: data, encoding: .utf8) else {
-                throw CocoaError(.fileWriteInapplicableStringEncoding)
-            }
-            let savedKey = key(for: record.fetchedAt)
-            CFPreferencesSetValue(
-                savedKey as CFString, text as CFString,
-                domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-            guard synchronize() else {
-                throw CocoaError(.fileWriteUnknown)
-            }
-            logger.notice("Saved response time=\(record.fetchedAt.timeIntervalSince1970) aircraft=\(record.states.count)")
-            prune(at: now)
-        } catch {
-            logger.error("History save failed: \(String(describing: error), privacy: .public)")
-        }
-    }
-
     // Returns actual successful observations, including successful empty frames.
     // No synthetic ten-minute records are inserted into gaps.
     func records(
@@ -80,19 +51,41 @@ actor AircraftHistoryStore {
         prune(at: Date())
         let earliest = max(start, Date().addingTimeInterval(-Self.retention))
         var result: [AircraftRecord] = []
-        for savedKey in keys() {
-            guard let date = timestamp(for: savedKey),
-                  date >= earliest, date <= end,
-                  let text = CFPreferencesCopyValue(
-                    savedKey as CFString, domain,
-                    kCFPreferencesCurrentUser,
-                    kCFPreferencesAnyHost) as? String,
-                  let data = text.data(using: .utf8),
-                  let record = try? JSONDecoder().decode(
-                    AircraftRecord.self, from: data),
-                  record.schema == 1, record.bounds.isValid,
-                  record.fetchedAt == date else { continue }
+        let savedKeys = keys()
+        let retainedKeys = Set(savedKeys)
+        legacyRecords = legacyRecords.filter { retainedKeys.contains($0.key) }
+        for savedKey in savedKeys {
+            guard let date = timestamp(for: savedKey), date >= earliest, date <= end else { continue }
+            if let cached = legacyRecords[savedKey] {
+                result.append(cached)
+                continue
+            }
+            guard let text = CFPreferencesCopyValue(
+                savedKey as CFString, domain,
+                kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? String,
+                let data = text.data(using: .utf8),
+                let record = try? JSONDecoder().decode(AircraftRecord.self, from: data),
+                record.schema == 1, record.bounds.isValid, record.fetchedAt == date else { continue }
+            legacyRecords[savedKey] = record
             result.append(record)
+        }
+        if let state = try? files.snapshot(),
+           let bounds = AircraftBounds.viewport(canvas: AircraftBounds.appCanvas) {
+            let retained = Set(state.batches.map(\.id))
+            sharedRecords = sharedRecords.filter { retained.contains($0.key) }
+            for batch in state.batches where batch.fetchedAt >= earliest && batch.fetchedAt <= end {
+                if let cached = sharedRecords[batch.id] {
+                    result.append(cached)
+                    continue
+                }
+                if let raw = try? files.record(for: batch) {
+                    let record = raw.scoped(to: bounds, at: raw.fetchedAt)
+                    sharedRecords[batch.id] = record
+                    result.append(record)
+                }
+            }
+        } else {
+            result += sharedRecords.values.filter { $0.fetchedAt >= earliest && $0.fetchedAt <= end }
         }
         return result.sorted { $0.fetchedAt < $1.fetchedAt }
     }
@@ -179,17 +172,12 @@ extension AircraftHistoryStore {
             return
         }
 
-        _ = synchronize()
-        let savedKey = Self.presentationPrefix
-            + String(record.fetchedAt.timeIntervalSince1970)
+        guard let id = record.batchID,
+              let url = files.presentationURL(id, role: AircraftSharedFiles.role) else { return }
 
         // Freeze the first completed presentation for this observation.
         // Later cache reads must not rewrite its labels or selected targets.
-        if CFPreferencesCopyValue(
-            savedKey as CFString, domain,
-            kCFPreferencesCurrentUser, kCFPreferencesAnyHost) != nil {
-            return
-        }
+        if FileManager.default.fileExists(atPath: url.path) { return }
 
         let reported = Set(record.visible(at: record.fetchedAt).map(\.icao24))
         var seen = Set<String>()
@@ -216,16 +204,7 @@ extension AircraftHistoryStore {
                 ids.contains($0.key) && (0...1).contains($0.value)
             })
         do {
-            let data = try JSONEncoder().encode(saved)
-            guard let text = String(data: data, encoding: .utf8) else {
-                throw CocoaError(.fileWriteInapplicableStringEncoding)
-            }
-            CFPreferencesSetValue(
-                savedKey as CFString, text as CFString, domain,
-                kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-            guard synchronize() else {
-                throw CocoaError(.fileWriteUnknown)
-            }
+            try JSONEncoder().encode(saved).write(to: url, options: .atomic)
         } catch {
             logger.error("History presentation save failed: \(String(describing: error), privacy: .public)")
         }
@@ -234,18 +213,23 @@ extension AircraftHistoryStore {
     func presentation(
         for record: AircraftRecord
     ) -> AircraftHistoryPresentation {
-        _ = synchronize()
-        let savedKey = Self.presentationPrefix
-            + String(record.fetchedAt.timeIntervalSince1970)
+        let saved: AircraftHistoryPresentation?
+        if let id = record.batchID, let url = files.presentationURL(id, role: "app") {
+            saved = try? AircraftSharedFiles.readIfPresent(AircraftHistoryPresentation.self, at: url)
+        } else {
+            _ = synchronize()
+            let key = Self.presentationPrefix + String(record.fetchedAt.timeIntervalSince1970)
+            if let text = CFPreferencesCopyValue(key as CFString, domain,
+                kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? String,
+               let data = text.data(using: .utf8) {
+                saved = try? JSONDecoder().decode(AircraftHistoryPresentation.self, from: data)
+            } else {
+                saved = nil
+            }
+        }
         let reported = Set(record.visible(at: record.fetchedAt).map(\.icao24))
 
-        if let text = CFPreferencesCopyValue(
-            savedKey as CFString, domain,
-            kCFPreferencesCurrentUser,
-            kCFPreferencesAnyHost) as? String,
-           let data = text.data(using: .utf8),
-           let saved = try? JSONDecoder().decode(
-                AircraftHistoryPresentation.self, from: data),
+        if let saved,
            saved.schema == 1,
            saved.fetchedAt == record.fetchedAt,
            saved.bounds == record.bounds,
@@ -264,10 +248,18 @@ extension AircraftHistoryStore {
 
         // Position history remains usable if metadata was unavailable or its
         // presentation could not be saved. Never make network requests here.
+        // When the app was closed, reuse metadata recorded by the widget,
+        // but select and lay out the targets for the app's own viewport.
+        var metadata: [String: AircraftMetadata] = [:]
+        if let id = record.batchID, let url = files.presentationURL(id, role: "widget"),
+           let widget = try? AircraftSharedFiles.readIfPresent(AircraftHistoryPresentation.self, at: url),
+           widget.schema == 1, widget.fetchedAt == record.fetchedAt {
+            metadata = widget.metadata.filter { reported.contains($0.key) }
+        }
         let candidates = record.visible(at: record.fetchedAt).map {
             TrackedAircraft(
                 state: $0,
-                kind: AircraftKind.classify(category: $0.category, model: nil),
+                kind: AircraftKind.classify(category: $0.category, model: metadata[$0.icao24]?.model),
                 firstSeen: record.fetchedAt)
         }
         let selection = AircraftSelector.select(
@@ -277,7 +269,7 @@ extension AircraftHistoryStore {
             fetchedAt: record.fetchedAt,
             bounds: record.bounds,
             aircraft: candidates,
-            metadata: [:],
+            metadata: metadata,
             selectedIDs: Set(selection.aircraft.map { $0.state.icao24 }),
             shanghaiIDs: selection.shanghaiIDs,
             labelPositions: [:])

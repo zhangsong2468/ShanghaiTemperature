@@ -24,6 +24,8 @@ final class AircraftPlaybackModel: ObservableObject {
     private var refreshGeneration = UUID()
     private var followAfter = Date.distantPast
     private var restored = false
+    private var refreshingHistory = false
+    private var refreshAgain = false
     private var transitionImage: CGImage?
 
     // Updated by window notifications and sleep/wake events.
@@ -60,12 +62,26 @@ final class AircraftPlaybackModel: ObservableObject {
     // Reading history never sends a network request.
     func refreshHistory() async {
         guard !dragging, !playing else { return }
+        if refreshingHistory {
+            refreshAgain = true
+            return
+        }
+        refreshingHistory = true
+        defer { refreshingHistory = false }
+        repeat {
+            refreshAgain = false
+            await loadHistory()
+        } while refreshAgain && !Task.isCancelled && !dragging && !playing
+    }
+
+    private func loadHistory() async {
+        guard !dragging, !playing else { return }
         let refreshID = UUID()
         refreshGeneration = refreshID
         let now = Date()
         let recent = await AircraftHistoryStore.shared.records(
             since: now.addingTimeInterval(-86400), through: now)
-        guard refreshGeneration == refreshID else { return }
+        guard refreshGeneration == refreshID, !dragging, !playing else { return }
         records = recent
 
         if !rangeLocked {
@@ -74,7 +90,8 @@ final class AircraftPlaybackModel: ObservableObject {
 
         if !restored {
             let operation = generation
-            let latest = await AircraftHistoryStore.shared.latestNonempty()
+            var latest = recent.last { !$0.visible(at: $0.fetchedAt).isEmpty }
+            if latest == nil { latest = await AircraftHistoryStore.shared.latestNonempty() }
             guard refreshGeneration == refreshID,
                   operation == generation,
                   !dragging, !playing else { return }
@@ -91,7 +108,7 @@ final class AircraftPlaybackModel: ObservableObject {
             return
         }
 
-        guard !AircraftPauseSettings.current.paused,
+        guard !(await AircraftSettingsIO.shared.paused()),
               !dragging, !playing,
               let latest = recent.last(where: {
                   $0.fetchedAt > followAfter
@@ -101,10 +118,10 @@ final class AircraftPlaybackModel: ObservableObject {
 
         let operation = generation
         let frame = await AircraftHistoryStore.shared.presentation(for: latest)
+        let paused = await AircraftSettingsIO.shared.paused()
         guard refreshGeneration == refreshID,
               operation == generation,
-              !AircraftPauseSettings.current.paused,
-              !dragging, !playing else { return }
+              !paused, !dragging, !playing else { return }
         guard !frame.selectedIDs.isEmpty,
               publish(frame) else { return }
         rangeLocked = false

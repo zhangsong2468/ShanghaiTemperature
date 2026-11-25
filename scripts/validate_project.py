@@ -72,7 +72,8 @@ print('PASS: complete 2015–2025 historical archive is available to app and ext
 for path, access in [('App/App.entitlements','read-write'),('Widgets/Widgets.entitlements','read-write')]:
     entitlements=plistlib.loads((root/path).read_bytes())
     assert entitlements['com.apple.security.temporary-exception.shared-preference.'+access]==['com.songa.ShanghaiTemperature.ThermalPreferences']
-print('PASS: app/extension share only the dedicated thermal-preference domain.')
+    assert entitlements['com.apple.security.temporary-exception.files.home-relative-path.read-write']==['/Library/Application Support/ShanghaiTemperature-Aircraft-v2/']
+print('PASS: app/extension share the dedicated preference domain and aircraft data directory.')
 
 assert 'Widgets/RegionalThermalMapWidget.swift' in w
 assert 'Widgets/Resources/ThermalMap' in resource_paths(widget)

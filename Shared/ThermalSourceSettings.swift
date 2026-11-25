@@ -31,31 +31,19 @@ struct AircraftRequestStatus: Codable {
     let interval: TimeInterval
     let nextRequest: Date
     let updatedAt: Date
+    var migrationPending: Bool? = nil
 
     private static let key = "aircraftRequestStatus"
 
-    static func publish(interval: TimeInterval, nextRequest: Date) {
-        let status = AircraftRequestStatus(
-            interval: interval, nextRequest: nextRequest, updatedAt: Date())
-        guard let data = try? JSONEncoder().encode(status),
-              let text = String(data: data, encoding: .utf8) else { return }
-        CFPreferencesSetAppValue(
-            key as CFString, text as CFString,
-            ThermalSourceSettings.domain as CFString)
-        if !CFPreferencesAppSynchronize(ThermalSourceSettings.domain as CFString) {
-            NSLog("Aircraft request status could not be shared")
+    // Migration must distinguish an absent old status from a failed read.
+    static func legacyDeadline() throws -> Date {
+        let domain = ThermalSourceSettings.domain as CFString
+        guard CFPreferencesAppSynchronize(domain) else { throw CocoaError(.fileReadUnknown) }
+        guard let value = CFPreferencesCopyAppValue(key as CFString, domain) else { return .distantPast }
+        guard let text = value as? String, let data = text.data(using: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
         }
-    }
-
-    static var current: AircraftRequestStatus? {
-        CFPreferencesAppSynchronize(ThermalSourceSettings.domain as CFString)
-        guard let text = CFPreferencesCopyAppValue(
-            key as CFString,
-            ThermalSourceSettings.domain as CFString) as? String,
-              let data = text.data(using: .utf8),
-              let status = try? JSONDecoder().decode(Self.self, from: data),
-              status.interval.isFinite, status.interval > 0 else { return nil }
-        return status
+        return try JSONDecoder().decode(Self.self, from: data).nextRequest
     }
 
     var intervalText: String {
@@ -63,6 +51,8 @@ struct AircraftRequestStatus: Codable {
     }
 
     var nextRequestText: String {
+        if migrationPending == true { return "等待主App和小组件首次初始化" }
+        if nextRequest == .distantPast { return "等待首次请求" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
@@ -144,4 +134,17 @@ enum AircraftPauseSettings {
             transfer.cancel()
         }
     }
+}
+
+// Synchronous CFPreferences calls must stay off the App's drawing path.
+actor AircraftSettingsIO {
+    static let shared = AircraftSettingsIO()
+
+    func settings() -> (ThermalSource, Bool) {
+        (ThermalSourceSettings.current, AircraftPauseSettings.current.paused)
+    }
+
+    func paused() -> Bool { AircraftPauseSettings.current.paused }
+    func savePause(_ paused: Bool) throws { try AircraftPauseSettings.save(paused: paused) }
+    func saveThermal(_ source: ThermalSource) throws { try ThermalSourceSettings.save(source) }
 }

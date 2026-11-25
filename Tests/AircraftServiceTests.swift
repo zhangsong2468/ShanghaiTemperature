@@ -139,4 +139,82 @@ final class AircraftServiceTests: XCTestCase {
         XCTAssertEqual(items.first { $0.name == "extended" }?.value, "1")
         XCTAssertEqual(items.first { $0.name == "lomin" }?.value, "116.0")
     }
+
+    func testSharedClaimMigrationAndLateResponse() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let files = AircraftSharedFiles(directory: directory)
+        let appDeadline = now.addingTimeInterval(900)
+        let widgetDeadline = now.addingTimeInterval(1200)
+        let app = try files.claim(role: "app", legacyDeadline: { appDeadline },
+            interval: 600, floor: .distantPast, paused: false, now: now)
+        XCTAssertNil(app.1)
+        let widget = try files.claim(role: "widget", legacyDeadline: { widgetDeadline },
+            interval: 600, floor: .distantPast, paused: false, now: now)
+        XCTAssertNil(widget.1)
+        XCTAssertEqual(widget.0.nextAllowedAt, widgetDeadline)
+
+        let first = try files.claim(role: "app", legacyDeadline: { .distantPast },
+            interval: 600, floor: .distantPast, paused: false, now: widgetDeadline)
+        let firstID = try XCTUnwrap(first.1)
+        let second = try files.claim(role: "widget", legacyDeadline: { .distantPast },
+            interval: 600, floor: .distantPast, paused: false, now: first.0.nextAllowedAt)
+        let secondID = try XCTUnwrap(second.1)
+        let lateDeadline = now.addingTimeInterval(3600)
+        let delayed = try files.applyResponse(id: firstID, deadline: lateDeadline, credits: 5)
+        XCTAssertEqual(delayed.nextAllowedAt, lateDeadline)
+        XCTAssertEqual(delayed.latestRequestID, secondID)
+        let newerResponse = try files.applyResponse(id: secondID, deadline: second.0.nextAllowedAt, credits: 4)
+        XCTAssertEqual(newerResponse.nextAllowedAt, lateDeadline)
+
+        let old = AircraftRecord(schema: 1, bounds: .acquisition, fetchedAt: now, states: [], batchID: firstID)
+        XCTAssertTrue(try files.publish(old, id: firstID).batches.isEmpty)
+        let record = AircraftRecord(schema: 1, bounds: .acquisition,
+            fetchedAt: second.0.nextAllowedAt, states: [], batchID: secondID)
+        let published = try files.publish(record, id: secondID)
+        XCTAssertEqual(published.batches.map(\.id), [secondID])
+        XCTAssertEqual(try files.publish(record, id: secondID).batches.count, 1)
+        let restored = try XCTUnwrap(files.record(for: published.batches[0]))
+        XCTAssertEqual(restored.batchID, secondID)
+    }
+
+    func testConcurrentSharedClaimsAndUnreadableState() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let files = AircraftSharedFiles(directory: directory)
+        for role in ["app", "widget"] {
+            _ = try files.claim(role: role, legacyDeadline: { .distantPast },
+                interval: 600, floor: .distantPast, paused: true, now: now)
+        }
+        let lock = NSLock()
+        var winners: [UUID] = []
+        var failures = 0
+        DispatchQueue.concurrentPerform(iterations: 16) { index in
+            do {
+                let process = AircraftSharedFiles(directory: directory)
+                let claim = try process.claim(role: index.isMultiple(of: 2) ? "app" : "widget",
+                    legacyDeadline: { .distantPast }, interval: 600,
+                    floor: .distantPast, paused: false, now: self.now)
+                if let id = claim.1 {
+                    lock.lock()
+                    winners.append(id)
+                    lock.unlock()
+                }
+            } catch {
+                lock.lock()
+                failures += 1
+                lock.unlock()
+            }
+        }
+        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(winners.count, 1)
+        XCTAssertEqual(try files.snapshot().nextAllowedAt, now.addingTimeInterval(600))
+
+        let stateURL = directory.appendingPathComponent("request-state.json")
+        let invalid = Data("invalid state".utf8)
+        try invalid.write(to: stateURL, options: .atomic)
+        XCTAssertThrowsError(try files.claim(role: "app", legacyDeadline: { .distantPast },
+            interval: 600, floor: .distantPast, paused: false, now: now))
+        XCTAssertEqual(try Data(contentsOf: stateURL), invalid)
+    }
 }

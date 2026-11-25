@@ -160,41 +160,7 @@ struct RegionalThermalMapProvider: TimelineProvider {
     }
 
     private func loadAircraft(size: CGSize) async -> AircraftOverlaySnapshot? {
-        guard let geometry = try? ThermalMapGeometry.bundled(),
-              geometry.bounds.count == 4,
-              size.width.isFinite, size.height.isFinite,
-              size.width > 0, size.height > 160 else { return nil }
-        let b = geometry.bounds
-        guard b.allSatisfy({ $0.isFinite }),
-              b[0] < b[2], b[1] < b[3],
-              b[1] > -85, b[3] < 85 else { return nil }
-        func mercator(_ latitude: Double) -> Double {
-            log(tan(.pi / 4 + latitude * .pi / 360))
-        }
-        func latitude(_ value: Double) -> Double {
-            (2 * atan(exp(value)) - .pi / 2) * 180 / .pi
-        }
-        // Match ThermalMapView's actual Canvas and projection rectangle.
-        let canvas = Self.canvasSize(widgetSize: size)
-        let width = Double(canvas.width)
-        let height = max(1, Double(canvas.height) - 18)
-        let west = b[0] * .pi / 180
-        let east = b[2] * .pi / 180
-        let south = mercator(b[1])
-        let north = mercator(b[3])
-        let scale = min(width * 0.64 / (east - west),
-                        height / (north - south))
-        guard scale.isFinite, scale > 0 else { return nil }
-        let middleX = (west + east) / 2
-        let middleY = (south + north) / 2
-        let halfWidth = width / (2 * scale)
-        let halfHeight = Double(canvas.height) / (2 * scale)
-        let bounds = AircraftBounds(
-            west:max(-180,(middleX-halfWidth)*180 / .pi),
-            south:max(-85,latitude(middleY-halfHeight)),
-            east:min(180,(middleX+halfWidth)*180 / .pi),
-            north:min(85,latitude(middleY+halfHeight)))
-        guard bounds.isValid else { return nil }
+        guard let bounds = AircraftBounds.viewport(canvas: Self.canvasSize(widgetSize: size)) else { return nil }
         return await AircraftOverlayStore.shared.load(bounds: bounds)
     }
 

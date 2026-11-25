@@ -59,7 +59,7 @@ private enum ThermalMapColour {
     }
 }
 
-private struct ThermalMapRasterResult {
+fileprivate struct ThermalMapRasterResult {
     let image: CGImage
     let edgeAnchors: [Int: [CGPoint]] // Largest visible connected part of each band.
     let interiorAnchors: [Int: [CGPoint]]
@@ -85,8 +85,10 @@ private enum ThermalMapRaster {
         let value=NSCache<NSString,ThermalMapRasterBox>();value.countLimit=3;value.totalCostLimit=2_000_000;return value
     }()
     static func image(snapshot: ThermalBandSnapshot, geometry: ThermalMapGeometry) -> ThermalMapRasterResult? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
         guard !snapshot.points.isEmpty,!snapshot.bands.isEmpty,
-              let encoded=try? JSONEncoder().encode(snapshot) else { return nil }
+              let encoded=try? encoder.encode(snapshot) else { return nil }
         let key=(SHA256.hash(data:encoded).map {String(format:"%02x",$0)}.joined()+geometry.bounds.description) as NSString
         if let existing=cache.object(forKey:key) { return existing.value }
         let width=320,height=448
@@ -179,6 +181,21 @@ private enum ThermalMapRaster {
     }
 }
 
+// Geometry and raster are immutable. Only the final SwiftUI image rendering
+// needs the main actor; the costly temperature interpolation can run elsewhere.
+struct ThermalMapPrepared: @unchecked Sendable {
+    fileprivate let geometry: ThermalMapGeometry?
+    fileprivate let raster: ThermalMapRasterResult?
+
+    static func prepare(_ display: ThermalMapDisplay) -> ThermalMapPrepared {
+        let geometry = try? ThermalMapGeometry.bundled()
+        let raster = display.snapshot.flatMap { snapshot in
+            geometry.flatMap { ThermalMapRaster.image(snapshot: snapshot, geometry: $0) }
+        }
+        return ThermalMapPrepared(geometry: geometry, raster: raster)
+    }
+}
+
 struct ThermalMapView: View {
     let display: ThermalMapDisplay
     let appPresentation: Bool
@@ -201,7 +218,8 @@ struct ThermalMapView: View {
          aircraftBounds: AircraftBounds? = nil,
          previousAircraftLabelPositions: [String: Int] = [:],
          preferredAircraftIDs: Set<String> = [],
-         preferredShanghaiAircraftIDs: Set<String> = []) {
+         preferredShanghaiAircraftIDs: Set<String> = [],
+         prepared: ThermalMapPrepared? = nil) {
         self.display=display
         self.appPresentation=appPresentation
         self.preparedCanvasSize=preparedCanvasSize
@@ -212,9 +230,9 @@ struct ThermalMapView: View {
         self.previousAircraftLabelPositions=previousAircraftLabelPositions
         self.preferredAircraftIDs=preferredAircraftIDs
         self.preferredShanghaiAircraftIDs=preferredShanghaiAircraftIDs
-        let geometry=try? ThermalMapGeometry.bundled()
-        self.geometry=geometry
-        self.raster=display.snapshot.flatMap { snapshot in geometry.flatMap { ThermalMapRaster.image(snapshot:snapshot,geometry:$0) } }
+        let prepared = prepared ?? ThermalMapPrepared.prepare(display)
+        self.geometry = prepared.geometry
+        self.raster = prepared.raster
     }
 
     private var mapFailureMessage: String {
