@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import OSLog
+import Darwin
 
 struct AircraftBounds: Codable, Equatable, Sendable {
     let west: Double
@@ -194,7 +195,7 @@ struct AircraftSharedState: Codable, Sendable {
     var nextAllowedAt = Date.distantPast
     var latestRequestID: UUID?
     var batches: [Batch] = []
-    var migratedRoles: Set<String> = []
+    var initializedRoles: Set<String>? = nil
     var remainingCredits: Int?
 }
 
@@ -207,16 +208,49 @@ struct AircraftSharedFiles: Sendable {
     let directory: URL?
 
     init(directory: URL? = nil) {
-        // The sandbox's applicationSupportDirectory differs in both processes.
-        // Resolve the real user home; the entitlement grants this one directory.
         if let directory {
             self.directory = directory
-        } else if let home = NSHomeDirectoryForUser(NSUserName()) {
-            self.directory = URL(fileURLWithPath: home, isDirectory: true)
-                .appendingPathComponent(Self.path, isDirectory: true)
         } else {
-            self.directory = nil
+            // Foundation home directory APIs return the sandbox home in 0.6.0.
+            // Resolve the login account through the POSIX password database.
+            self.directory = Self.realUserHome()?.appendingPathComponent(Self.path, isDirectory: true)
+            let logger = Logger(subsystem: "com.songa.ShanghaiTemperature", category: "OpenSky")
+            if let shared = self.directory {
+                logger.notice("Shared directory resolved role=\(Self.role, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier) path=\(shared.path, privacy: .public)")
+            } else {
+                logger.error("Shared directory resolution failed role=\(Self.role, privacy: .public)")
+            }
         }
+    }
+
+    static func realUserHome() -> URL? {
+        // getpwuid_r keeps the returned strings in the caller's buffer.
+        var size = 16_384
+        while size <= 1_048_576 {
+            var entry = passwd()
+            var result: UnsafeMutablePointer<passwd>?
+            var buffer = [CChar](repeating: 0, count: size)
+            let (status, path) = buffer.withUnsafeMutableBufferPointer { storage -> (Int32, String?) in
+                let status = getpwuid_r(getuid(), &entry, storage.baseAddress, storage.count, &result)
+                guard status == 0, result != nil, let directory = entry.pw_dir else {
+                    return (status, nil)
+                }
+                return (status, String(validatingUTF8: directory))
+            }
+            if status == ERANGE {
+                size *= 2
+                continue
+            }
+            guard status == 0, let path, path.hasPrefix("/") else { return nil }
+            let home = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+            // Fail closed if the account lookup ever returns a container path.
+            let components = home.pathComponents
+            guard !zip(components, components.dropFirst()).contains(where: {
+                $0.0 == "Library" && $0.1 == "Containers"
+            }) else { return nil }
+            return home
+        }
+        return nil
     }
 
     private func stateURL(_ root: URL) -> URL {
@@ -264,15 +298,14 @@ struct AircraftSharedFiles: Sendable {
         try coordinated { try readState($0) }
     }
 
-    func claim(role: String, legacyDeadline: () throws -> Date,
-               interval: TimeInterval, floor: Date, paused: Bool,
+    func claim(role: String, interval: TimeInterval, floor: Date, paused: Bool,
                now: Date? = nil) throws -> (AircraftSharedState, UUID?) {
         try coordinated { root in
             var state = try readState(root)
             var changed = false
-            if !state.migratedRoles.contains(role) {
-                state.nextAllowedAt = max(state.nextAllowedAt, try legacyDeadline())
-                state.migratedRoles.insert(role)
+            var roles = state.initializedRoles ?? []
+            if roles.insert(role).inserted {
+                state.initializedRoles = roles
                 changed = true
             }
             if floor > state.nextAllowedAt {
@@ -281,9 +314,8 @@ struct AircraftSharedFiles: Sendable {
             }
             let claimTime = now ?? Date()
             var id: UUID? = nil
-            // Both legacy containers must be migrated before a network request.
-            if !paused, state.migratedRoles.isSuperset(of: ["app", "widget"]),
-               claimTime >= state.nextAllowedAt {
+            // Registration is diagnostic; either process can claim on its own.
+            if !paused, claimTime >= state.nextAllowedAt {
                 guard interval.isFinite, interval >= 600 else { throw CocoaError(.fileWriteUnknown) }
                 id = UUID()
                 state.latestRequestID = id
@@ -353,6 +385,7 @@ actor AircraftStore {
     private let refreshInterval: TimeInterval
     private var record: AircraftRecord?
     private var floor: Date = .distantPast
+    private var sharedStateUnavailable = false
     private var inFlight: Task<AircraftUpdate, Never>?
     private let logger = Logger(subsystem: "com.songa.ShanghaiTemperature", category: "OpenSky")
     init(directory: URL? = nil, session: URLSession? = nil, refreshInterval: TimeInterval = 600) {
@@ -392,17 +425,21 @@ actor AircraftStore {
             refreshAfter: result.refreshAfter, remainingCredits: result.remainingCredits)
     }
 
-    func requestStatus() -> AircraftRequestStatus? {
-        guard let state = try? files.snapshot() else { return nil }
-        return AircraftRequestStatus(interval: refreshInterval,
-            nextRequest: max(state.nextAllowedAt, floor), updatedAt: Date(),
-            migrationPending: !state.migratedRoles.isSuperset(of: ["app", "widget"]))
-    }
-
-    private func legacyDeadline() throws -> Date {
-        let own = try AircraftSharedFiles.readIfPresent(Date.self,
-            at: legacyDirectory.appendingPathComponent("next-request.json")) ?? .distantPast
-        return max(own, try AircraftRequestStatus.legacyDeadline())
+    func requestStatus() -> AircraftRequestStatus {
+        if sharedStateUnavailable {
+            return AircraftRequestStatus(interval: refreshInterval, nextRequest: nil,
+                initializedRoles: [])
+        }
+        do {
+            let state = try files.snapshot()
+            return AircraftRequestStatus(interval: refreshInterval,
+                nextRequest: max(state.nextAllowedAt, floor),
+                initializedRoles: state.initializedRoles ?? [])
+        } catch {
+            logger.error("Shared request status unavailable role=\(AircraftSharedFiles.role, privacy: .public) error=\(String(describing: error), privacy: .public)")
+            return AircraftRequestStatus(interval: refreshInterval, nextRequest: nil,
+                initializedRoles: [])
+        }
     }
 
     private func fetch() async -> AircraftUpdate {
@@ -415,18 +452,28 @@ actor AircraftStore {
         let pause = AircraftPauseSettings.current
         let claim: (AircraftSharedState, UUID?)
         do {
-            claim = try files.claim(role: AircraftSharedFiles.role, legacyDeadline: legacyDeadline,
+            claim = try files.claim(role: AircraftSharedFiles.role,
                 interval: refreshInterval, floor: floor, paused: pause.paused)
+            sharedStateUnavailable = false
         } catch {
-            logger.error("Shared request state unavailable: \(String(describing: error), privacy: .public)")
+            sharedStateUnavailable = true
+            logger.error("Shared request state unavailable role=\(AircraftSharedFiles.role, privacy: .public) error=\(String(describing: error), privacy: .public)")
             return AircraftUpdate(record: record, refreshAfter: Date().addingTimeInterval(60), remainingCredits: nil)
         }
         var state = claim.0
+        let role = AircraftSharedFiles.role
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let roles = (state.initializedRoles ?? []).sorted().joined(separator: ",")
+        let path = files.directory?.path ?? "-"
+        let next = ISO8601DateFormatter().string(from: state.nextAllowedAt)
+        let currentID = state.latestRequestID?.uuidString ?? "-"
+        let outcome = claim.1 == nil ? (pause.paused ? "paused" : "cache") : "claimed"
+        logger.notice("Shared request check role=\(role, privacy: .public) pid=\(pid) path=\(path, privacy: .public) initializedRoles=\(roles, privacy: .public) outcome=\(outcome, privacy: .public) latestRequestID=\(currentID, privacy: .public) nextAllowedAt=\(next, privacy: .public)")
         if let id = claim.1, Date() < state.nextAllowedAt {
             do {
                 var request = URLRequest(url: try AircraftDecoder.url(bounds: .acquisition))
                 request.timeoutInterval = 8
-                logger.notice("Request start id=\(id.uuidString, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier)")
+                logger.notice("Request start id=\(id.uuidString, privacy: .public) role=\(role, privacy: .public) pid=\(pid)")
                 let (data, response) = try await AircraftPauseSettings.data(for: request, session: session)
                 let receivedAt = Date()
                 guard let http = response as? HTTPURLResponse else { throw AircraftServiceError.invalidResponse }
@@ -451,7 +498,8 @@ actor AircraftStore {
                 }
                 floor = max(floor, receivedAt.addingTimeInterval(delay))
                 state = try files.applyResponse(id: id, deadline: floor, credits: credits)
-                logger.notice("Response id=\(id.uuidString, privacy: .public) status=\(http.statusCode) waitSeconds=\(delay)")
+                let deadline = ISO8601DateFormatter().string(from: state.nextAllowedAt)
+                logger.notice("Response id=\(id.uuidString, privacy: .public) role=\(role, privacy: .public) status=\(http.statusCode) waitSeconds=\(delay) nextAllowedAt=\(deadline, privacy: .public)")
                 guard http.statusCode == 200, data.count <= 5_000_000 else {
                     throw AircraftServiceError.invalidResponse
                 }
@@ -469,9 +517,7 @@ actor AircraftStore {
         if let latest = state.batches.last, latest.id != record?.batchID {
             if let saved = try? files.record(for: latest) { record = saved }
         }
-        let retry = state.migratedRoles.isSuperset(of: ["app", "widget"])
-            ? max(state.nextAllowedAt, floor)
-            : max(Date().addingTimeInterval(60), state.nextAllowedAt)
-        return AircraftUpdate(record: record, refreshAfter: retry, remainingCredits: state.remainingCredits)
+        return AircraftUpdate(record: record, refreshAfter: max(state.nextAllowedAt, floor),
+            remainingCredits: state.remainingCredits)
     }
 }

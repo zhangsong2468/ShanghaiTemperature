@@ -152,6 +152,8 @@ struct ContentView: View {
                         Text(requestStatus?.intervalText ?? "10 min（600 s）")
                     }
                 }
+                Text(requestStatus?.initializationText ?? "正在读取共享状态")
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("下次允许查询：" + (requestStatus?.nextRequestText ?? "读取共享状态"))
                     .fixedSize(horizontal: false, vertical: true)
             }

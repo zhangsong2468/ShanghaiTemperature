@@ -140,25 +140,21 @@ final class AircraftServiceTests: XCTestCase {
         XCTAssertEqual(items.first { $0.name == "lomin" }?.value, "116.0")
     }
 
-    func testSharedClaimMigrationAndLateResponse() throws {
+    func testSingleRoleCanClaimAndLateResponsePreservesDeadline() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let files = AircraftSharedFiles(directory: directory)
-        let appDeadline = now.addingTimeInterval(900)
-        let widgetDeadline = now.addingTimeInterval(1200)
-        let app = try files.claim(role: "app", legacyDeadline: { appDeadline },
-            interval: 600, floor: .distantPast, paused: false, now: now)
-        XCTAssertNil(app.1)
-        let widget = try files.claim(role: "widget", legacyDeadline: { widgetDeadline },
-            interval: 600, floor: .distantPast, paused: false, now: now)
-        XCTAssertNil(widget.1)
-        XCTAssertEqual(widget.0.nextAllowedAt, widgetDeadline)
-
-        let first = try files.claim(role: "app", legacyDeadline: { .distantPast },
-            interval: 600, floor: .distantPast, paused: false, now: widgetDeadline)
+        let first = try files.claim(role: "app", interval: 600,
+            floor: .distantPast, paused: false, now: now)
         let firstID = try XCTUnwrap(first.1)
-        let second = try files.claim(role: "widget", legacyDeadline: { .distantPast },
-            interval: 600, floor: .distantPast, paused: false, now: first.0.nextAllowedAt)
+        XCTAssertEqual(first.0.initializedRoles, Set(["app"]))
+        let other = try files.claim(role: "widget", interval: 600,
+            floor: .distantPast, paused: false, now: now)
+        XCTAssertNil(other.1)
+        XCTAssertEqual(other.0.initializedRoles, Set(["app", "widget"]))
+        XCTAssertEqual(other.0.nextAllowedAt, now.addingTimeInterval(600))
+        let second = try files.claim(role: "widget", interval: 600,
+            floor: .distantPast, paused: false, now: first.0.nextAllowedAt)
         let secondID = try XCTUnwrap(second.1)
         let lateDeadline = now.addingTimeInterval(3600)
         let delayed = try files.applyResponse(id: firstID, deadline: lateDeadline, credits: 5)
@@ -182,10 +178,6 @@ final class AircraftServiceTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let files = AircraftSharedFiles(directory: directory)
-        for role in ["app", "widget"] {
-            _ = try files.claim(role: role, legacyDeadline: { .distantPast },
-                interval: 600, floor: .distantPast, paused: true, now: now)
-        }
         let lock = NSLock()
         var winners: [UUID] = []
         var failures = 0
@@ -193,7 +185,7 @@ final class AircraftServiceTests: XCTestCase {
             do {
                 let process = AircraftSharedFiles(directory: directory)
                 let claim = try process.claim(role: index.isMultiple(of: 2) ? "app" : "widget",
-                    legacyDeadline: { .distantPast }, interval: 600,
+                    interval: 600,
                     floor: .distantPast, paused: false, now: self.now)
                 if let id = claim.1 {
                     lock.lock()
@@ -208,13 +200,42 @@ final class AircraftServiceTests: XCTestCase {
         }
         XCTAssertEqual(failures, 0)
         XCTAssertEqual(winners.count, 1)
-        XCTAssertEqual(try files.snapshot().nextAllowedAt, now.addingTimeInterval(600))
+        let snapshot = try files.snapshot()
+        XCTAssertEqual(snapshot.nextAllowedAt, now.addingTimeInterval(600))
+        XCTAssertEqual(snapshot.initializedRoles, Set(["app", "widget"]))
 
         let stateURL = directory.appendingPathComponent("request-state.json")
         let invalid = Data("invalid state".utf8)
         try invalid.write(to: stateURL, options: .atomic)
-        XCTAssertThrowsError(try files.claim(role: "app", legacyDeadline: { .distantPast },
-            interval: 600, floor: .distantPast, paused: false, now: now))
+        XCTAssertThrowsError(try files.claim(role: "app", interval: 600, floor: .distantPast, paused: false, now: now))
         XCTAssertEqual(try Data(contentsOf: stateURL), invalid)
+    }
+
+    func testExistingSharedDeadlineSurvivesRegistrationAndRestart() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // The registration field is optional; preserve a valid existing manifest.
+        let deadline = now.addingTimeInterval(3600)
+        let state = AircraftSharedState(nextAllowedAt: deadline)
+        try JSONEncoder().encode(state).write(to: directory.appendingPathComponent("request-state.json"))
+        let widget = try AircraftSharedFiles(directory: directory).claim(role: "widget",
+            interval: 600, floor: .distantPast, paused: false, now: now)
+        XCTAssertNil(widget.1)
+        XCTAssertEqual(widget.0.initializedRoles, Set(["widget"]))
+        XCTAssertEqual(widget.0.nextAllowedAt, deadline)
+        let restarted = try AircraftSharedFiles(directory: directory).claim(role: "app",
+            interval: 600, floor: .distantPast, paused: false, now: now)
+        XCTAssertNil(restarted.1)
+        XCTAssertEqual(restarted.0.initializedRoles, Set(["app", "widget"]))
+        XCTAssertEqual(restarted.0.nextAllowedAt, deadline)
+    }
+
+    func testResolvedHomeDirectoryMatchesLoginAccount() throws {
+        let home = try XCTUnwrap(AircraftSharedFiles.realUserHome())
+        XCTAssertTrue(home.path.hasPrefix("/"))
+        XCTAssertFalse(home.path.contains("/Library/Containers/"))
+        XCTAssertEqual(home.standardizedFileURL.path,
+            FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path)
     }
 }

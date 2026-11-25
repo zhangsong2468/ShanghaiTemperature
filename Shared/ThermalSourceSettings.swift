@@ -27,23 +27,21 @@ enum ThermalSourceSettings {
 }
 
 
-struct AircraftRequestStatus: Codable {
+struct AircraftRequestStatus: Sendable {
     let interval: TimeInterval
-    let nextRequest: Date
-    let updatedAt: Date
-    var migrationPending: Bool? = nil
+    let nextRequest: Date?
+    let initializedRoles: Set<String>
 
-    private static let key = "aircraftRequestStatus"
-
-    // Migration must distinguish an absent old status from a failed read.
-    static func legacyDeadline() throws -> Date {
-        let domain = ThermalSourceSettings.domain as CFString
-        guard CFPreferencesAppSynchronize(domain) else { throw CocoaError(.fileReadUnknown) }
-        guard let value = CFPreferencesCopyAppValue(key as CFString, domain) else { return .distantPast }
-        guard let text = value as? String, let data = text.data(using: .utf8) else {
-            throw CocoaError(.fileReadCorruptFile)
+    var initializationText: String {
+        guard nextRequest != nil else { return "共享目录访问失败" }
+        let app = initializedRoles.contains("app")
+        let widget = initializedRoles.contains("widget")
+        switch (app, widget) {
+        case (true, true): return "初始化完成（2/2）"
+        case (true, false): return "等待小组件初始化（1/2）"
+        case (false, true): return "等待主 App 初始化（1/2）"
+        case (false, false): return "等待初始化（0/2）"
         }
-        return try JSONDecoder().decode(Self.self, from: data).nextRequest
     }
 
     var intervalText: String {
@@ -51,7 +49,7 @@ struct AircraftRequestStatus: Codable {
     }
 
     var nextRequestText: String {
-        if migrationPending == true { return "等待主App和小组件首次初始化" }
+        guard let nextRequest else { return "暂不可查询" }
         if nextRequest == .distantPast { return "等待首次请求" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
