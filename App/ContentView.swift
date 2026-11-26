@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var thermalImage: CGImage?
     @State private var lastPreparedBatchID: UUID?
     @State private var requestStatus: AircraftRequestStatus?
+    @State private var initializationCompletionExpired = false
     @State private var loadingThermal = false
     @State private var loadingAircraft = false
     @State private var nextThermal = Date.distantPast
@@ -27,6 +28,10 @@ struct ContentView: View {
     @State private var settingError: String?
 
     private let mapSize = AircraftBounds.appCanvas
+
+    private var aircraftInitializationComplete: Bool {
+        requestStatus?.isInitializationComplete == true
+    }
 
     private var thermalMap: some View {
         Group {
@@ -80,6 +85,17 @@ struct ContentView: View {
                 do { try await Task.sleep(nanoseconds: 30_000_000_000) }
                 catch { break }
             }
+        }
+        .task(id: aircraftInitializationComplete) {
+            initializationCompletionExpired = false
+            guard aircraftInitializationComplete else { return }
+            do {
+                try await Task.sleep(for: .seconds(60))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            initializationCompletionExpired = true
         }
         .task {
             playback.presentationActive = mapWindow.presentable && !systemSleeping
@@ -162,8 +178,10 @@ struct ContentView: View {
                         Text(requestStatus?.intervalText ?? "10 min（600 s）")
                     }
                 }
-                Text(requestStatus?.initializationText ?? "正在读取共享状态")
-                    .fixedSize(horizontal: false, vertical: true)
+                if !aircraftInitializationComplete || !initializationCompletionExpired {
+                    Text(requestStatus?.initializationText ?? "正在读取共享状态")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text("下次允许查询：" + (requestStatus?.nextRequestText ?? "读取共享状态"))
                     .fixedSize(horizontal: false, vertical: true)
             }

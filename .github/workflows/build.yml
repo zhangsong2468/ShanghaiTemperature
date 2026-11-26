@@ -50,7 +50,7 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          version=0.6.10
+          version=0.6.12
           if [[ "$REF_TYPE" == tag ]]; then version="${REF_NAME#v}"; fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -95,6 +95,8 @@ jobs:
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           cat > release-notes.md <<'EOF'
+          0.6.12：主 App 首次读到飞机共享状态初始化完成后，提示保留 1 分钟并自动隐藏。
+
           0.6.10：杨浦滨江潮位参考的预报水位和时间取同一次潮汐。涨潮显示下一次高潮，退潮显示下一次低潮，实测及预报水位均保留两位小数。
 
           0.6.8：杨浦滨江潮位参考显示未来24小时内的预报最高水位。涨潮显示下一次高潮时间，退潮显示下一次低潮时间。系统日志记录潮位请求结果、缓存异常及隐藏原因。

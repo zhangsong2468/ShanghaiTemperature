@@ -32,6 +32,10 @@ struct AircraftRequestStatus: Sendable {
     let nextRequest: Date?
     let initializedRoles: Set<String>
 
+    var isInitializationComplete: Bool {
+        nextRequest != nil && initializedRoles.isSuperset(of: ["app", "widget"])
+    }
+
     var initializationText: String {
         guard nextRequest != nil else { return "共享目录访问失败" }
         let app = initializedRoles.contains("app")
