@@ -25,7 +25,7 @@ sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift', 'App/Air
            'Shared/HistoricalWeatherArchive.swift', 'Shared/ThermalComparison.swift',
            'Shared/ThermalSourceSettings.swift', 'Shared/NetworkApparentTemperature.swift',
            'Shared/DynamicThermalBands.swift', 'Shared/ThermalMapGeometry.swift', 'Shared/ThermalMapView.swift', 'Shared/SolarTermCalendar.swift', 'Shared/ThermalSurface.swift',
-           'Shared/RegionalThermalStore.swift', 'Shared/RegionalCurrentWeather.swift', 'Shared/ThermalTimingAnalysis.swift',
+           'Shared/RegionalThermalStore.swift', 'Shared/RegionalCurrentWeather.swift', 'Shared/ThermalTimingAnalysis.swift', 'Shared/YangpuTide.swift',
            'Widgets/ShanghaiTemperatureWidgets.swift', 'Widgets/RegionalThermalMapWidget.swift']
 refs = {}
 for path in sources:
@@ -56,6 +56,8 @@ main_group = obj('main-group','PBXGroup',children=list(refs.values())+extra+[fra
 for extension in [False, True]:
     prefix = 'widget' if extension else 'app'
     paths = [p for p in sources if p.startswith('Shared/') or p.startswith('Widgets/' if extension else 'App/')]
+    if extension:
+        paths.remove('Shared/YangpuTide.swift')
     builds = [obj(prefix+':build:'+p, 'PBXBuildFile', fileRef=refs[p]) for p in paths]
     obj(prefix+':sources', 'PBXSourcesBuildPhase', buildActionMask='2147483647', files=builds, runOnlyForDeploymentPostprocessing='0')
     frameworks = [obj(prefix+':framework:'+str(i),'PBXBuildFile',fileRef=ref) for i,ref in enumerate(framework_refs)]

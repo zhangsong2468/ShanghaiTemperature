@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var expanded = false
     @State private var systemSleeping = false
     @StateObject private var mapWindow = AircraftMapWindowReference()
+    @State private var tideSnapshot: YangpuTideSnapshot?
     @State private var thermalDisplay: ThermalMapDisplay?
     @State private var thermalFetchedAt: Date?
     @State private var thermalRenderID = UUID()
@@ -96,6 +97,15 @@ struct ContentView: View {
             while !Task.isCancelled {
                 await refreshAircraftIfNeeded()
                 guard await waitForRefresh(until: nextAircraft) else { break }
+            }
+        }
+        .task(id: systemSleeping) {
+            guard !systemSleeping else { return }
+            while !Task.isCancelled {
+                let update = await YangpuTideStore.shared.refresh()
+                guard !Task.isCancelled else { break }
+                tideSnapshot = update.snapshot
+                guard await waitForRefresh(until: update.refreshAfter) else { break }
             }
         }
         .onChange(of: mapWindow.presentable) { _, visible in
@@ -206,8 +216,22 @@ struct ContentView: View {
             if let settingError {
                 Text(settingError).foregroundStyle(.secondary)
             }
-            Link("数据来源：Open-Meteo · CC BY 4.0",
-                 destination: URL(string: "https://open-meteo.com/")!)
+            TimelineView(.everyMinute) { context in
+                VStack(alignment: .leading, spacing: 7) {
+                    if let line = tideSnapshot?.line(at: context.date) {
+                        Text(line)
+                            .lineLimit(1)
+                            .accessibilityHint("黄浦公园站潮位参考")
+                    }
+                    HStack(spacing: 5) {
+                        Text("数据来源")
+                        Link("Open-Meteo", destination: URL(string: "https://open-meteo.com/")!)
+                            .help("CC BY 4.0")
+                        Text("·")
+                        Link("OpenSky", destination: URL(string: "https://opensky-network.org/")!)
+                    }
+                }
+            }
         }
         .font(.system(size: 10))
         .padding(.horizontal, 18)
