@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct TideReading: Codable, Sendable {
     let date: Date
@@ -7,7 +8,8 @@ struct TideReading: Codable, Sendable {
 
 struct YangpuTideSnapshot: Codable, Sendable {
     static let maximumObservationAge: TimeInterval = 30 * 60
-    static let maximumForecastGap: TimeInterval = 12 * 3600
+    private static let maximumForecastGap: TimeInterval = 12 * 3600
+    private static let forecastWindow: TimeInterval = 24 * 3600
 
     var observations: [TideReading] = []
     var forecasts: [TideReading] = []
@@ -23,7 +25,7 @@ struct YangpuTideSnapshot: Codable, Sendable {
     mutating func updateForecasts(_ readings: [TideReading], now: Date) {
         guard let first = readings.first else { return }
         // A later forecast may shift an extremum's time. Replace the
-        // overlapping segment, retaining past forecasts for today's maximum.
+        // overlapping segment and retain earlier extrema as context.
         let overlap = first.date.addingTimeInterval(-2 * 3600)
         let retention = now.addingTimeInterval(-48 * 3600)
         forecasts = forecasts.filter { $0.date >= retention && $0.date < overlap } + readings
@@ -34,55 +36,70 @@ struct YangpuTideSnapshot: Codable, Sendable {
         case falling = "退潮"
     }
 
+    enum DisplayFailure: String, Error {
+        case observationMissingOrExpired = "observation_missing_or_expired"
+        case needSecondObservation = "need_second_observation"
+        case trendTooSmall = "trend_too_small"
+        case noHighInNext24Hours = "no_high_in_next_24h"
+        case noMatchingFutureTide = "no_matching_future_tide"
+    }
+
     private func extremum(at index: Int) -> Direction? {
-        guard index > 0, index + 1 < forecasts.count else { return nil }
-        let before = forecasts[index - 1]
         let point = forecasts[index]
-        let after = forecasts[index + 1]
-        guard point.date.timeIntervalSince(before.date) <= Self.maximumForecastGap,
-              after.date.timeIntervalSince(point.date) <= Self.maximumForecastGap else { return nil }
-        if point.level > before.level && point.level > after.level { return .rising }
-        if point.level < before.level && point.level < after.level { return .falling }
+        // The feed lists successive highs and lows. At either edge of the
+        // response we can classify a point using its one available neighbour.
+        let neighbours = [index - 1, index + 1]
+            .filter { forecasts.indices.contains($0) }
+            .map { forecasts[$0] }
+        guard !neighbours.isEmpty, neighbours.allSatisfy({
+            let gap = abs($0.date.timeIntervalSince(point.date))
+            return gap > 0 && gap <= Self.maximumForecastGap
+        }) else { return nil }
+        if neighbours.allSatisfy({ point.level > $0.level }) { return .rising }
+        if neighbours.allSatisfy({ point.level < $0.level }) { return .falling }
         return nil
     }
 
     func line(at now: Date) -> String? {
+        try? display(at: now).get()
+    }
+
+    func display(at now: Date) -> Result<String, DisplayFailure> {
         guard let latest = observations.last,
-              (0...Self.maximumObservationAge).contains(now.timeIntervalSince(latest.date)),
-              let previous = observations.first(where: {
-                  let interval = latest.date.timeIntervalSince($0.date)
-                  return interval > 0 && interval <= 15 * 60
-              }) else { return nil }
+              (0...Self.maximumObservationAge).contains(now.timeIntervalSince(latest.date))
+        else { return .failure(.observationMissingOrExpired) }
+        guard let previous = observations.first(where: {
+            let interval = latest.date.timeIntervalSince($0.date)
+            return interval > 0 && interval <= 15 * 60
+        }) else { return .failure(.needSecondObservation) }
 
         let change = latest.level - previous.level
-        guard abs(change) >= 0.02 else { return nil }
+        guard abs(change) >= 0.02 else { return .failure(.trendTooSmall) }
         let direction: Direction = change > 0 ? .rising : .falling
 
-        let today = ShanghaiTime.calendar.startOfDay(for: now)
-        let tomorrow = ShanghaiTime.nextMidnight(after: now)
-        // Require a continuous forecast sequence spanning the entire day.
-        // A rolling response containing only the remaining low tide is insufficient.
-        guard let beforeToday = forecasts.lastIndex(where: { $0.date < today }),
-              let afterToday = forecasts.firstIndex(where: { $0.date >= tomorrow }),
-              beforeToday + 1 < afterToday else { return nil }
-
-        let todayIndices = (beforeToday + 1)..<afterToday
-        guard todayIndices.allSatisfy({ extremum(at: $0) != nil }),
-              let peak = todayIndices.filter({ extremum(at: $0) == .rising })
-                  .map({ forecasts[$0].level }).max(),
-              let next = forecasts.indices.first(where: {
-                  forecasts[$0].date > now && extremum(at: $0) == direction
-              }) else { return nil }
+        let forecastEnd = now.addingTimeInterval(Self.forecastWindow)
+        let future = forecasts.indices.compactMap { index -> (reading: TideReading, direction: Direction)? in
+            let reading = forecasts[index]
+            guard reading.date > now, let direction = extremum(at: index) else { return nil }
+            return (reading, direction)
+        }
+        guard let peak = future.filter({
+            $0.direction == .rising && $0.reading.date <= forecastEnd
+        }).map({ $0.reading.level }).max() else { return .failure(.noHighInNext24Hours) }
+        guard let next = future.first(where: { $0.direction == direction }) else {
+            return .failure(.noMatchingFutureTide)
+        }
 
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = ShanghaiTime.zone
         formatter.dateFormat = "HH:mm"
-        let time = formatter.string(from: forecasts[next].date)
-        return String(format: "杨浦滨江 · %@ · %.1f / %.1f m %@",
-                      locale: Locale(identifier: "en_US_POSIX"),
-                      direction.rawValue, latest.level, peak, time)
+        let time = formatter.string(from: next.reading.date)
+        return .success(String(format: "杨浦滨江 · %@ · %.1f / %.1f m %@",
+                               locale: Locale(identifier: "en_US_POSIX"),
+                               direction.rawValue, latest.level, peak, time))
     }
+
 }
 
 struct YangpuTideUpdate: Sendable {
@@ -92,6 +109,8 @@ struct YangpuTideUpdate: Sendable {
 
 actor YangpuTideStore {
     static let shared = YangpuTideStore()
+    private static let logger = Logger(subsystem: "com.songa.ShanghaiTemperature", category: "YangpuTide")
+    private static let stationID = "SW63401500"
 
     private enum Feed: String, Sendable {
         case observed = "SSSW"
@@ -122,11 +141,18 @@ actor YangpuTideStore {
         let file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first?.appendingPathComponent("ShanghaiTemperature/yangpu-tide-v1.json")
         cacheURL = file
-        if let file, let data = try? Data(contentsOf: file),
-           let saved = try? JSONDecoder().decode(YangpuTideSnapshot.self, from: data) {
-            snapshot = saved
+        if let file, FileManager.default.fileExists(atPath: file.path) {
+            do {
+                let saved = try JSONDecoder().decode(YangpuTideSnapshot.self, from: Data(contentsOf: file))
+                snapshot = saved
+                Self.logger.notice("Cache loaded observations=\(saved.observations.count) forecasts=\(saved.forecasts.count)")
+            } catch {
+                snapshot = YangpuTideSnapshot()
+                Self.logger.error("Cache read failed: \(String(describing: error), privacy: .public)")
+            }
         } else {
             snapshot = YangpuTideSnapshot()
+            Self.logger.notice("No tide cache at startup")
         }
     }
 
@@ -157,31 +183,74 @@ actor YangpuTideStore {
             } ?? []
             observationsAvailable = !usable.isEmpty
             snapshot.updateObservations(usable, now: receivedAt)
+            if let observed, !observed.isEmpty, usable.isEmpty {
+                Self.logger.warning("SSSW has no observation within the last 30 minutes")
+            }
         }
         if forecastDue {
             forecastsAvailable = predicted?.contains(where: { $0.date > receivedAt }) ?? false
             if let predicted, forecastsAvailable {
                 snapshot.updateForecasts(predicted, now: receivedAt)
+            } else if let predicted, !predicted.isEmpty {
+                Self.logger.warning("YJSW has no future tide readings")
             }
         }
         if (observationDue && observationsAvailable) || (forecastDue && forecastsAvailable),
            let cacheURL {
-            try? FileManager.default.createDirectory(
-                at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? JSONEncoder().encode(snapshot).write(to: cacheURL, options: .atomic)
+            do {
+                try FileManager.default.createDirectory(
+                    at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try JSONEncoder().encode(snapshot).write(to: cacheURL, options: .atomic)
+            } catch {
+                Self.logger.error("Cache write failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        let available = observationsAvailable && forecastsAvailable
+        if available {
+            switch snapshot.display(at: receivedAt) {
+            case .success(let line):
+                Self.logger.notice("Tide line ready: \(line, privacy: .public)")
+            case .failure(let reason):
+                Self.logger.notice("Tide line hidden reason=\(reason.rawValue, privacy: .public) observations=\(self.snapshot.observations.count) forecasts=\(self.snapshot.forecasts.count)")
+            }
+        } else {
+            Self.logger.notice("Tide line hidden reason=feed_unavailable observed=\(self.observationsAvailable) forecast=\(self.forecastsAvailable)")
         }
         return YangpuTideUpdate(
-            snapshot: observationsAvailable && forecastsAvailable ? snapshot : nil,
+            snapshot: available ? snapshot : nil,
             refreshAfter: min(nextObservation, nextForecast))
     }
 
     private static func fetch(_ feed: Feed, due: Bool, session: URLSession) async -> [TideReading]? {
         guard due else { return nil }
+        let name = feed.rawValue
+        logger.notice("Tide request start feed=\(name, privacy: .public) station=\(stationID, privacy: .public)")
         do {
             let (data, response) = try await session.data(from: feed.url)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-            return parse(data, levelField: feed.levelField)
+            guard let http = response as? HTTPURLResponse else {
+                logger.error("Tide request returned no HTTP status feed=\(name, privacy: .public)")
+                return nil
+            }
+            guard http.statusCode == 200 else {
+                logger.error("Tide HTTP error feed=\(name, privacy: .public) status=\(http.statusCode)")
+                return nil
+            }
+            guard let readings = parse(data, levelField: feed.levelField) else {
+                logger.error("Tide response invalid JSON or API status feed=\(name, privacy: .public) bytes=\(data.count)")
+                return nil
+            }
+            guard let first = readings.first, let last = readings.last else {
+                logger.warning("Tide response has no valid station rows feed=\(name, privacy: .public) station=\(stationID, privacy: .public)")
+                return nil
+            }
+            let firstTime = ShanghaiTime.timestamp(first.date)
+            let lastTime = ShanghaiTime.timestamp(last.date)
+            logger.notice("Tide request success feed=\(name, privacy: .public) rows=\(readings.count) first=\(firstTime, privacy: .public) last=\(lastTime, privacy: .public) lastLevel=\(last.level) m")
+            return readings
         } catch {
+            let error = error as NSError
+            logger.error("Tide network error feed=\(name, privacy: .public) domain=\(error.domain, privacy: .public) code=\(error.code) detail=\(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
@@ -198,7 +267,7 @@ actor YangpuTideStore {
         formatter.isLenient = false
 
         var readings: [Date: TideReading] = [:]
-        for row in rows where row["STATIONID"] as? String == "SW63401500" {
+        for row in rows where row["STATIONID"] as? String == stationID {
             guard let text = row["DATETIME"] as? String,
                   let date = formatter.date(from: text),
                   let value = row[levelField] as? String,

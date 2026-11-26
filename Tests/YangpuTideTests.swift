@@ -17,6 +17,7 @@ final class YangpuTideTests: XCTestCase {
             .init(date: time(26, 21, 20), level: 0.7),
             .init(date: time(27, 2), level: 4.2),
             .init(date: time(27, 9), level: 1.2),
+            .init(date: time(27, 17), level: 6.0),
         ]
     }
 
@@ -34,11 +35,11 @@ final class YangpuTideTests: XCTestCase {
             .init(date: time(26, 15, 35), level: 4.2),
         ], now: time(26, 15, 36))
         XCTAssertEqual(snapshot.line(at: time(26, 15, 36)),
-                       "杨浦滨江 · 退潮 · 4.2 / 5.0 m 21:20")
+                       "杨浦滨江 · 退潮 · 4.2 / 4.2 m 21:20")
         XCTAssertNil(snapshot.line(at: time(26, 16, 6)))
     }
 
-    func testRollingForecastRetainsEarlierHighAndRequiresCoverage() {
+    func testFutureOnlyForecastWorksOnFirstLaunchAndCrossesMidnight() {
         let observationTime = time(26, 16)
         let observations = [
             TideReading(date: time(26, 15, 55), level: 4.2),
@@ -46,14 +47,30 @@ final class YangpuTideTests: XCTestCase {
         ]
         let evening = Array(fullForecast.dropFirst(4))
         var snapshot = YangpuTideSnapshot(observations: observations, forecasts: evening)
-        XCTAssertNil(snapshot.line(at: observationTime))
+        XCTAssertEqual(snapshot.line(at: observationTime),
+                       "杨浦滨江 · 退潮 · 4.1 / 4.2 m 21:20")
 
         snapshot.forecasts = fullForecast
         snapshot.updateForecasts(evening, now: observationTime)
         XCTAssertEqual(snapshot.line(at: observationTime),
-                       "杨浦滨江 · 退潮 · 4.1 / 5.0 m 21:20")
+                       "杨浦滨江 · 退潮 · 4.1 / 4.2 m 21:20")
         snapshot.observations = [observations[1]]
-        XCTAssertNil(snapshot.line(at: observationTime))
+        XCTAssertThrowsError(try snapshot.display(at: observationTime).get()) { error in
+            XCTAssertEqual(error as? YangpuTideSnapshot.DisplayFailure, .needSecondObservation)
+        }
+    }
+
+    func testSingleForecastPointCannotIdentifyAHigh() {
+        let now = time(26, 16)
+        let snapshot = YangpuTideSnapshot(
+            observations: [
+                .init(date: time(26, 15, 55), level: 4.2),
+                .init(date: now, level: 4.1),
+            ],
+            forecasts: [.init(date: time(26, 21, 20), level: 0.7)])
+        XCTAssertThrowsError(try snapshot.display(at: now).get()) { error in
+            XCTAssertEqual(error as? YangpuTideSnapshot.DisplayFailure, .noHighInNext24Hours)
+        }
     }
 
     func testReadOnlyHuangpuParkAndIgnoreInvalidHeight() throws {
