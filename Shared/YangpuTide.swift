@@ -9,7 +9,6 @@ struct TideReading: Codable, Sendable {
 struct YangpuTideSnapshot: Codable, Sendable {
     static let maximumObservationAge: TimeInterval = 30 * 60
     private static let maximumForecastGap: TimeInterval = 12 * 3600
-    private static let forecastWindow: TimeInterval = 24 * 3600
 
     var observations: [TideReading] = []
     var forecasts: [TideReading] = []
@@ -40,7 +39,6 @@ struct YangpuTideSnapshot: Codable, Sendable {
         case observationMissingOrExpired = "observation_missing_or_expired"
         case needSecondObservation = "need_second_observation"
         case trendTooSmall = "trend_too_small"
-        case noHighInNext24Hours = "no_high_in_next_24h"
         case noMatchingFutureTide = "no_matching_future_tide"
     }
 
@@ -77,29 +75,20 @@ struct YangpuTideSnapshot: Codable, Sendable {
         guard abs(change) >= 0.02 else { return .failure(.trendTooSmall) }
         let direction: Direction = change > 0 ? .rising : .falling
 
-        let forecastEnd = now.addingTimeInterval(Self.forecastWindow)
-        let future = forecasts.indices.compactMap { index -> (reading: TideReading, direction: Direction)? in
-            let reading = forecasts[index]
-            guard reading.date > now, let direction = extremum(at: index) else { return nil }
-            return (reading, direction)
-        }
-        guard let peak = future.filter({
-            $0.direction == .rising && $0.reading.date <= forecastEnd
-        }).map({ $0.reading.level }).max() else { return .failure(.noHighInNext24Hours) }
-        guard let next = future.first(where: { $0.direction == direction }) else {
-            return .failure(.noMatchingFutureTide)
-        }
+        guard let nextIndex = forecasts.indices.first(where: {
+            forecasts[$0].date > now && extremum(at: $0) == direction
+        }) else { return .failure(.noMatchingFutureTide) }
+        let next = forecasts[nextIndex]
 
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = ShanghaiTime.zone
         formatter.dateFormat = "HH:mm"
-        let time = formatter.string(from: next.reading.date)
-        return .success(String(format: "杨浦滨江 · %@ · %.1f / %.1f m %@",
+        let time = formatter.string(from: next.date)
+        return .success(String(format: "杨浦滨江 · %@ · %.2f / %.2f m %@",
                                locale: Locale(identifier: "en_US_POSIX"),
-                               direction.rawValue, latest.level, peak, time))
+                               direction.rawValue, latest.level, next.level, time))
     }
-
 }
 
 struct YangpuTideUpdate: Sendable {
