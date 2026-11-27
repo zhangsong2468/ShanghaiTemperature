@@ -194,7 +194,7 @@ struct CoastalCurrentGlyph: Sendable {
         let y: Double
         func distance(to other: Point) -> Double { hypot(x-other.x,y-other.y) }
     }
-    static let headLength = 2.2
+    static let headLength = 3.3
     let tip: Point
     let left: Point
     let right: Point
@@ -209,21 +209,20 @@ struct CoastalCurrentGlyph: Sendable {
         let h=Self.headLength
         let base=Point(x:-dx*h,y:-dy*h)
         tip=Point(x:0,y:0)
-        left=Point(x:base.x-dy*0.9,y:base.y+dx*0.9)
-        right=Point(x:base.x+dy*0.9,y:base.y-dx*0.9)
-        // A visual scale, not a physical speed class. Weak currents get only a chevron.
+        left=Point(x:base.x-dy*1.35,y:base.y+dx*1.35)
+        right=Point(x:base.x+dy*1.35,y:base.y-dx*1.35)
+        // A visual scale, not a physical speed class. All moving currents retain a short tail.
         let strength=min(1,max(0,(speed-0.15)/1.35))
         opacity=0.35+0.25*strength
-        guard strength>0 else { start=nil;control1=nil;control2=nil;return }
         var tx=dx,ty=dy
         if let x=coastEast,let y=coastNorth,x.isFinite,y.isFinite,hypot(x,y)>1e-9 {
             let length=hypot(x,y);tx=x/length;ty=y/length
             let alignment=tx*dx+ty*dy
             if alignment<(-1e-9) || (abs(alignment)<=1e-9 && ty<0) { tx = -tx;ty = -ty }
         }
-        // The cubic control-polygon length is h + tail <= 3h (6.6 pt).
+        // The cubic control-polygon length is h + tail <= 3h (9.9 pt).
         // Its final tangent ALWAYS equals the API heading, even for east/west flow.
-        let tail=2*h*strength
+        let tail=max(0.4*h,2*h*strength)
         start=Point(x:base.x-tx*tail,y:base.y-ty*tail)
         control1=Point(x:base.x-tx*tail*2/3,y:base.y-ty*tail*2/3)
         control2=base

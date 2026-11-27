@@ -33,7 +33,7 @@ else
 fi
 [[ "$owner" =~ ^[A-Za-z0-9-]+$ ]]
 REPO="$owner/ShanghaiTemperature"
-VERSION=0.7.2
+VERSION=0.7.4
 cd "$ROOT"
 python3 scripts/validate_project.py
 if [[ ! -d .git ]]; then git init -b main; fi

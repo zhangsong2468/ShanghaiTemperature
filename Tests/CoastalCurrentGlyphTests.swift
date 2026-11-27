@@ -3,13 +3,15 @@ import Foundation
 @testable import WeatherCore
 
 final class CoastalCurrentGlyphTests: XCTestCase {
-    func testSlowCurrentHasOnlySmallArrowHead() throws {
+    func testSlowCurrentKeepsShortTailAndLargerHead() throws {
         let glyph=try XCTUnwrap(CoastalCurrentGlyph(speed:0.1,direction:90))
-        XCTAssertNil(glyph.start)
-        XCTAssertNil(glyph.control1)
-        XCTAssertNil(glyph.control2)
+        let start=try XCTUnwrap(glyph.start)
+        let control1=try XCTUnwrap(glyph.control1)
+        let control2=try XCTUnwrap(glyph.control2)
+        let length=start.distance(to:control1)+control1.distance(to:control2)+control2.distance(to:glyph.tip)
+        XCTAssertEqual(length,4.62,accuracy:1e-9)
         XCTAssertEqual(glyph.tip.x,0)
-        XCTAssertEqual((glyph.left.x+glyph.right.x)/2,-2.2,accuracy:1e-9)
+        XCTAssertEqual((glyph.left.x+glyph.right.x)/2,-3.3,accuracy:1e-9)
     }
 
     func testEntireCurveNeverExceedsThreeHeadLengths() throws {
