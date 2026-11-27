@@ -126,9 +126,17 @@ final class CoastalCurrentTests: XCTestCase {
         let result=await store.load()
         XCTAssertNil(result.overlay)
         XCTAssertGreaterThanOrEqual(result.refreshAfter.timeIntervalSince(clock.now()),600)
-        clock.advance(600)
+        // Before the deadline, retry remains suppressed.
+        clock.advance(599)
         let cached=await store.load()
         XCTAssertNil(cached.overlay)
         XCTAssertEqual(StubWeatherProtocol.count,1)
+        // Exactly at ten minutes, a new attempt is allowed. A second 429
+        // still hides the overlay and establishes a new ten-minute deadline.
+        clock.advance(1)
+        let retried=await store.load()
+        XCTAssertNil(retried.overlay)
+        XCTAssertEqual(StubWeatherProtocol.count,2)
+        XCTAssertGreaterThanOrEqual(retried.refreshAfter.timeIntervalSince(clock.now()),600)
     }
 }
