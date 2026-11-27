@@ -4,6 +4,7 @@ import WidgetKit
 struct RegionalThermalMapEntry: TimelineEntry {
     let date: Date
     let display: ThermalMapDisplay
+    var coastalCurrents: CoastalCurrentOverlay? = nil
     var aircraftOverlay: AircraftOverlaySnapshot? = nil
     var aircraftCanvasSize: CGSize? = nil
 }
@@ -28,9 +29,10 @@ struct RegionalThermalMapProvider: TimelineProvider {
     func getSnapshot(in context: Context,completion: @escaping (RegionalThermalMapEntry) -> Void) {
         if context.isPreview { completion(placeholder(in:context));return }
         Task {
+            async let currents = CoastalCurrentStore.shared.load()
             async let temperature = RegionalThermalStore.shared.load()
             async let aircraft = loadAircraft(size: context.displaySize)
-            let (update, loadedOverlay) = await (temperature, aircraft)
+            let (update, loadedOverlay, currentUpdate) = await (temperature, aircraft, currents)
             let canvas = Self.canvasSize(widgetSize: context.displaySize)
             let preparedAt = Date()
             let currentDisplay = display(update,at:preparedAt)
@@ -39,14 +41,15 @@ struct RegionalThermalMapProvider: TimelineProvider {
                 canvas:canvas, preparedAt:preparedAt)
             completion(RegionalThermalMapEntry(
                 date:preparedAt,display:currentDisplay,
-                aircraftOverlay:overlay,aircraftCanvasSize:canvas))
+                coastalCurrents:currentUpdate.overlay,aircraftOverlay:overlay,aircraftCanvasSize:canvas))
         }
     }
     func getTimeline(in context: Context,completion: @escaping (Timeline<RegionalThermalMapEntry>) -> Void) {
         Task {
+            async let currents = CoastalCurrentStore.shared.load()
             async let temperature = RegionalThermalStore.shared.load()
             async let aircraft = loadAircraft(size: context.displaySize)
-            let (update, loadedOverlay) = await (temperature, aircraft)
+            let (update, loadedOverlay, currentUpdate) = await (temperature, aircraft, currents)
             let canvas = Self.canvasSize(widgetSize: context.displaySize)
             let preparedAt = Date()
             let overlay = await prepareOverlay(
@@ -60,19 +63,24 @@ struct RegionalThermalMapProvider: TimelineProvider {
             if let record=update.record {
                 dates += [record.fetchedAt.addingTimeInterval(ForecastRecord.maximumCacheAge+1)]
             }
+            if let currents=currentUpdate.overlay,currents.expiresAt>now {
+                dates.append(currents.expiresAt)
+            }
             dates += WidgetAircraftVisibility.expirationDates(overlay, after: now)
             let entries=Array(Set(dates.filter {$0>=now})).sorted().map { date in
                 RegionalThermalMapEntry(
                     date:date,
                     display:date==now ? display(update,at:now) : update.projected(at:date),
+                    coastalCurrents:currentUpdate.overlay,
                     aircraftOverlay:overlay,
                     aircraftCanvasSize:canvas)
             }
             let refresh = min(
+                currentUpdate.refreshAfter,min(
                 update.refreshAfter,
                 AircraftPauseSettings.current.paused
                     ? update.refreshAfter
-                    : (overlay?.refreshAfter ?? update.refreshAfter))
+                    : (overlay?.refreshAfter ?? update.refreshAfter)))
             completion(Timeline(entries:entries,
                 policy:.after(max(now.addingTimeInterval(60),refresh))))
         }
@@ -168,6 +176,7 @@ struct RegionalThermalMapWidget: Widget {
         StaticConfiguration(kind:"ShanghaiTemperature.RegionalThermalMap",provider:RegionalThermalMapProvider()) { entry in
             ThermalMapView(
                 display:entry.display,
+                coastalCurrents:entry.coastalCurrents,
                 preparedCanvasSize:entry.aircraftCanvasSize,
                 aircraft:WidgetAircraftVisibility.visible(
                     entry.aircraftOverlay, at:entry.date),

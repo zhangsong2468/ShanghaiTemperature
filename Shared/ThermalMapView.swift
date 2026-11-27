@@ -199,6 +199,7 @@ struct ThermalMapPrepared: @unchecked Sendable {
 struct ThermalMapView: View {
     let display: ThermalMapDisplay
     let appPresentation: Bool
+    let coastalCurrents: CoastalCurrentOverlay?
     var preparedCanvasSize: CGSize? = nil
     let aircraft: [TrackedAircraft]
     let aircraftFrozenAt: Date?
@@ -212,6 +213,7 @@ struct ThermalMapView: View {
     private let raster: ThermalMapRasterResult?
     init(display: ThermalMapDisplay,
          appPresentation: Bool = false,
+         coastalCurrents: CoastalCurrentOverlay? = nil,
          preparedCanvasSize: CGSize? = nil,
          aircraft: [TrackedAircraft] = [],
          aircraftFrozenAt: Date? = nil,
@@ -224,6 +226,7 @@ struct ThermalMapView: View {
          prepared: ThermalMapPrepared? = nil) {
         self.display=display
         self.appPresentation=appPresentation
+        self.coastalCurrents=coastalCurrents
         self.preparedCanvasSize=preparedCanvasSize
         self.aircraft=aircraft
         self.aircraftFrozenAt=aircraftFrozenAt
@@ -322,6 +325,8 @@ struct ThermalMapView: View {
         clipped.clip(to:outline,style:FillStyle(eoFill:true))
         clipped.draw(Image(decorative:raster.image,scale:1).interpolation(.high),in:projection.rect)
         context.stroke(outline,with:.color(.primary.opacity(0.55)),lineWidth:0.55)
+        // Sea currents sit below temperature labels, city names and aircraft.
+        drawCoastalCurrents(context:&context,size:size,projection:projection,outline:outline,geometry:geometry)
         // Range labels choose nearby space on every side before place names.
         var aircraftLeaderObstacles = [CGRect]()
         var occupied=drawRanges(
@@ -348,6 +353,37 @@ struct ThermalMapView: View {
         }
         return drawAircraft(context:&context,size:size,projection:projection,
             reserved:occupied + aircraftLeaderObstacles,renderAircraft:renderAircraft)
+    }
+
+    private func drawCoastalCurrents(context: inout GraphicsContext,size: CGSize,
+                                    projection: MapProjection,outline: Path,geometry: ThermalMapGeometry) {
+        guard !appPresentation,!display.isReplay,let coastalCurrents else { return }
+        let samples=coastalCurrents.visible(at:display.date)
+        guard !samples.isEmpty else { return }
+        var sea=context
+        var mask=Path(CGRect(origin:.zero,size:size));mask.addPath(outline)
+        sea.clip(to:mask,style:FillStyle(eoFill:true))
+        for sample in samples {
+            guard !geometry.contains(longitude:sample.longitude,latitude:sample.latitude) else { continue }
+            let centre=projection.point(longitude:sample.longitude,latitude:sample.latitude)
+            guard CGRect(origin:.zero,size:size).insetBy(dx:4,dy:4).contains(centre) else { continue }
+            // Continuous display scaling, not official speed categories.
+            let strength=CGFloat(min(1,sample.speed/1.5))
+            let length:CGFloat=10+14*strength
+            let dx=CGFloat(sample.eastwardUnit),dy = -CGFloat(sample.northwardUnit)
+            let start=CGPoint(x:centre.x-dx*length/2,y:centre.y-dy*length/2)
+            let end=CGPoint(x:centre.x+dx*length/2,y:centre.y+dy*length/2)
+            let control=CGPoint(x:centre.x-dy*0.6,y:centre.y+dx*0.6)
+            var line=Path();line.move(to:start);line.addQuadCurve(to:end,control:control)
+            let tangent=hypot(end.x-control.x,end.y-control.y)
+            guard tangent>0 else { continue }
+            let tx=(end.x-control.x)/tangent,ty=(end.y-control.y)/tangent
+            line.move(to:CGPoint(x:end.x-tx*3-ty*1.7,y:end.y-ty*3+tx*1.7))
+            line.addLine(to:end)
+            line.addLine(to:CGPoint(x:end.x-tx*3+ty*1.7,y:end.y-ty*3-tx*1.7))
+            sea.stroke(line,with:.color(Color.gray.opacity(Double(0.35+0.4*strength))),
+                style:StrokeStyle(lineWidth:0.7,lineCap:.round,lineJoin:.round))
+        }
     }
 
     private func drawAircraft(context: inout GraphicsContext, size: CGSize,

@@ -20,7 +20,7 @@ def plist(path, value):
     (ROOT / path).write_bytes(plistlib.dumps(value, sort_keys=False))
 
 sources = ['App/ShanghaiTemperatureApp.swift', 'App/ContentView.swift', 'App/AircraftPlaybackModel.swift', 'App/AircraftHistoryRuler.swift', 'App/AircraftFrameRenderer.swift',
-           'Shared/WeatherModel.swift', 'Shared/TemperatureChartView.swift', 'Shared/WeatherService.swift',
+           'Shared/CoastalCurrent.swift', 'Shared/WeatherModel.swift', 'Shared/TemperatureChartView.swift', 'Shared/WeatherService.swift',
            'Shared/CommuteRainForecast.swift', 'Shared/AircraftService.swift', 'Shared/AircraftHistory.swift', 'Shared/AircraftMetadata.swift', 'Shared/AircraftTracking.swift', 'Shared/AircraftSelection.swift', 'Shared/AircraftMapLayer.swift',
            'Shared/HistoricalWeatherArchive.swift', 'Shared/ThermalComparison.swift',
            'Shared/ThermalSourceSettings.swift', 'Shared/NetworkApparentTemperature.swift',
@@ -74,7 +74,7 @@ for extension in [False, True]:
             'GENERATE_INFOPLIST_FILE':'NO','CODE_SIGN_STYLE':'Automatic',
             'SWIFT_VERSION':'5.0','MACOSX_DEPLOYMENT_TARGET':'14.0','SDKROOT':'macosx',
             'SUPPORTED_PLATFORMS':'macosx', 'ENABLE_HARDENED_RUNTIME':'YES',
-            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.6.12',
+            'CURRENT_PROJECT_VERSION':'2', 'MARKETING_VERSION':'0.7.0',
             'LD_RUNPATH_SEARCH_PATHS':['$(inherited)','@executable_path/../Frameworks']+(['@executable_path/../../../../Frameworks'] if extension else []),
             'SWIFT_OPTIMIZATION_LEVEL':'-Onone' if config=='Debug' else '-O',
             'SWIFT_COMPILATION_MODE':'singlefile' if config=='Debug' else 'wholemodule',
