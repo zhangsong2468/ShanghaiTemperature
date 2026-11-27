@@ -13,3 +13,7 @@
 验证：python3 scripts/check-coastal-currents.py 为结构检查，--live 单次验证真实五点接口。Tests/CoastalCurrentTests.swift 覆盖即时字段、方向、缺测、单位、到期、并发、持久化及限流，需完整Swift工具链。实际桌面图形和系统调度仍需安装验证。
 
 数据与许可：Open-Meteo Marine Weather API https://open-meteo.com/en/docs/marine-weather-api ，Météo-France / E.U. Copernicus Marine SMOC；来源许可随原有数据来源说明保留。
+
+## 0.7.2 微型符号
+
+箭头头部轴向长度2.2pt、半宽0.9pt，描边0.5pt，统一灰色。速度<=0.15m/s仅画箭头头部；这是绘图比例的起点，不是物理分级。更快时连续增长尾线，1.5m/s及以上到达上限：箭头轴向长度加尾线路径长度<=6.6pt。根据现有大陆轮廓寻找附近海岸的切线，排除省界；尾线顺该切线轻弯，曲线末端切线始终与接口真实流向相同，东西向不改为南北向。无海岸切线时使用实际方向的短尾线。保持海面裁剪和文字下层绘制。10分钟请求间隔、120秒显示、缺测和Retry-After处理保持不变。

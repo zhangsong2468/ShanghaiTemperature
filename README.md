@@ -23,7 +23,7 @@ bash scripts/publish-github.sh --public --release
 
 这个命令会在当前登录的 GitHub 账户下创建 **公开仓库 `ShanghaiTemperature`**，上传此目录的源码，并推送 `v0.2.7` 标签。若未登录，会进入 GitHub 官方登录流程。脚本会使用 GitHub noreply 邮箱提交；不包含私人证书、API Key、个人文件或其他项目源码。已存在的同名仓库不会被覆盖。GitHub CLI 需提前安装（本机已检测到 `gh`）。
 
-日常推送 main 运行构建并保留产物；发布新版本则推送新的 `vX.Y.Z` 标签。Release 默认为预览版，不宣称完成了实机验收。不要重复覆盖旧标签。
+日常推送 main 仅同步源码，不触发 push 构建；发布新版本时推送新的 `vX.Y.Z` 标签，触发一次标签构建。保留 PR 检查与手动构建入口。Release 默认为预览版，不宣称完成了实机验收。不要重复覆盖旧标签。
 
 公开仓库使用 GitHub 标准托管运行器，不需要自行填写 Apple 密钥或搬用 Sticky 的 secrets。正式 Developer ID 签名和 Apple 公证可后续单独配置；当前预览版未公证，macOS 可能提示运行限制。不得以“签名检查通过”冒充 Gatekeeper、公证或桌面组件注册通过。
 

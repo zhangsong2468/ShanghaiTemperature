@@ -33,7 +33,7 @@ else
 fi
 [[ "$owner" =~ ^[A-Za-z0-9-]+$ ]]
 REPO="$owner/ShanghaiTemperature"
-VERSION=0.7.0
+VERSION=0.7.2
 cd "$ROOT"
 python3 scripts/validate_project.py
 if [[ ! -d .git ]]; then git init -b main; fi
@@ -74,4 +74,8 @@ fi
 echo "源码：https://github.com/$REPO"
 echo "构建：https://github.com/$REPO/actions"
 echo "发布：https://github.com/$REPO/releases"
-echo '线上测试、编译全部通过后才会生成安装包。标签构建将发布预览版 Release。'
+if [[ "$RELEASE" == true ]]; then
+  echo '源码和标签已同步；仅标签 push 触发发布构建，测试、编译通过后生成预览版 Release。'
+else
+  echo '源码已同步到 main；普通 main push 不触发构建。发布时请使用 --release 并更新到新版本。'
+fi

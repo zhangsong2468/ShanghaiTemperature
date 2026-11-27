@@ -367,23 +367,52 @@ struct ThermalMapView: View {
             guard !geometry.contains(longitude:sample.longitude,latitude:sample.latitude) else { continue }
             let centre=projection.point(longitude:sample.longitude,latitude:sample.latitude)
             guard CGRect(origin:.zero,size:size).insetBy(dx:4,dy:4).contains(centre) else { continue }
-            // Continuous display scaling, not official speed categories.
-            let strength=CGFloat(min(1,sample.speed/1.5))
-            let length:CGFloat=10+14*strength
-            let dx=CGFloat(sample.eastwardUnit),dy = -CGFloat(sample.northwardUnit)
-            let start=CGPoint(x:centre.x-dx*length/2,y:centre.y-dy*length/2)
-            let end=CGPoint(x:centre.x+dx*length/2,y:centre.y+dy*length/2)
-            let control=CGPoint(x:centre.x-dy*0.6,y:centre.y+dx*0.6)
-            var line=Path();line.move(to:start);line.addQuadCurve(to:end,control:control)
-            let tangent=hypot(end.x-control.x,end.y-control.y)
-            guard tangent>0 else { continue }
-            let tx=(end.x-control.x)/tangent,ty=(end.y-control.y)/tangent
-            line.move(to:CGPoint(x:end.x-tx*3-ty*1.7,y:end.y-ty*3+tx*1.7))
-            line.addLine(to:end)
-            line.addLine(to:CGPoint(x:end.x-tx*3+ty*1.7,y:end.y-ty*3-tx*1.7))
-            sea.stroke(line,with:.color(Color.gray.opacity(Double(0.35+0.4*strength))),
-                style:StrokeStyle(lineWidth:0.7,lineCap:.round,lineJoin:.round))
+            let coast=coastalTangent(near:centre,projection:projection,outline:outline,geometry:geometry)
+            guard let glyph=CoastalCurrentGlyph(speed:sample.speed,direction:sample.direction,
+                coastEast:coast.map { Double($0.x) },coastNorth:coast.map { -Double($0.y) }) else { continue }
+            func point(_ value: CoastalCurrentGlyph.Point) -> CGPoint {
+                CGPoint(x:centre.x+CGFloat(value.x),y:centre.y-CGFloat(value.y))
+            }
+            var line=Path()
+            if let start=glyph.start,let control1=glyph.control1,let control2=glyph.control2 {
+                line.move(to:point(start))
+                line.addCurve(to:point(glyph.tip),control1:point(control1),control2:point(control2))
+            }
+            line.move(to:point(glyph.left));line.addLine(to:point(glyph.tip));line.addLine(to:point(glyph.right))
+            sea.stroke(line,with:.color(Color.gray.opacity(glyph.opacity)),
+                style:StrokeStyle(lineWidth:0.5,lineCap:.round,lineJoin:.round))
         }
+    }
+
+    private func coastalTangent(near point: CGPoint,projection: MapProjection,
+                                outline: Path,geometry: ThermalMapGeometry) -> CGPoint? {
+        // Search the existing mainland geometry. Longitudinal/latitudinal ordering
+        // alone cannot identify the local shore. Reject internal province borders.
+        var nearby: [(distance:CGFloat,nearest:CGPoint,tangent:CGPoint)] = []
+        for region in geometry.regions { for polygon in region.polygons {
+            guard let ring=polygon.first,ring.count>1 else { continue }
+            for index in 0..<(ring.count-1) {
+                let a=projection.point(longitude:ring[index][0],latitude:ring[index][1])
+                let b=projection.point(longitude:ring[index+1][0],latitude:ring[index+1][1])
+                let dx=b.x-a.x,dy=b.y-a.y,lengthSquared=dx*dx+dy*dy
+                guard lengthSquared>1e-6 else { continue }
+                let fraction=min(1,max(0,((point.x-a.x)*dx+(point.y-a.y)*dy)/lengthSquared))
+                let nearest=CGPoint(x:a.x+fraction*dx,y:a.y+fraction*dy)
+                let distance=hypot(nearest.x-point.x,nearest.y-point.y)
+                let length=sqrt(lengthSquared)
+                nearby.append((distance,nearest,CGPoint(x:dx/length,y:dy/length)))
+            }
+        } }
+        // A small number of silhouette tests avoids testing thousands of segments
+        // against the whole polygon. The geometry/projection itself is unchanged.
+        for candidate in nearby.sorted(by:{ $0.distance<$1.distance }).prefix(24) {
+            let t=candidate.tangent,p=candidate.nearest
+            let normal=CGPoint(x:-t.y*0.7,y:t.x*0.7)
+            let left=outline.contains(CGPoint(x:p.x+normal.x,y:p.y+normal.y),eoFill:true)
+            let right=outline.contains(CGPoint(x:p.x-normal.x,y:p.y-normal.y),eoFill:true)
+            if left != right { return t }
+        }
+        return nil
     }
 
     private func drawAircraft(context: inout GraphicsContext, size: CGSize,
